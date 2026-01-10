@@ -27,7 +27,7 @@ jobs:
       - uses: dabao1955/kernel_build_action@main
         with:
           kernel-url: https://github.com/fjrXTR/gki-5.10.git
-          kernel-dir: .
+          kernel-dir: gki-src
           kernel-branch: villhaze-new
           config: gki_defconfig
           arch: arm64
