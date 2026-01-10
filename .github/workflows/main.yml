@@ -12,25 +12,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system cross compiler into /opt/gcc-64
-        run: |
-          sudo apt update
-          sudo apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu binutils-aarch64-linux-gnu
-          sudo mkdir -p /opt/gcc-64/bin
-          sudo ln -sf /usr/bin/aarch64-linux-gnu-gcc /opt/gcc-64/bin/aarch64-linux-android-gcc
-          sudo ln -sf /usr/bin/aarch64-linux-gnu-g++ /opt/gcc-64/bin/aarch64-linux-android-g++
-          sudo ln -sf /usr/bin/aarch64-linux-gnu-ar /opt/gcc-64/bin/aarch64-linux-android-ar
-          sudo ln -sf /usr/bin/aarch64-linux-gnu-ranlib /opt/gcc-64/bin/aarch64-linux-android-ranlib
-          sudo ln -sf /usr/bin/aarch64-linux-gnu-strip /opt/gcc-64/bin/aarch64-linux-android-strip
-          echo "/opt/gcc-64/bin" >> $GITHUB_PATH
-          ls -l /opt/gcc-64/bin
-
-      - name: Clean possible existing /home/runner/gcc-64
-        run: |
-          if [ -d /home/runner/gcc-64 ]; then sudo rm -rf /home/runner/gcc-64; fi
-          if [ -f /home/runner/gcc-64 ]; then sudo rm -f /home/runner/gcc-64; fi
-          ls -la /home/runner | sed -n '1,200p'
-
       - name: Install clang 21
         run: |
           sudo apt update
@@ -43,15 +24,25 @@ jobs:
           sudo update-alternatives --install /usr/bin/ld.lld ld.lld /usr/bin/ld.lld-21 100
           clang --version
 
+      - name: Fake AOSP GCC
+        run: |
+          mkdir -p /home/runner/gcc-64/bin
+          echo '#!/bin/sh' > /home/runner/gcc-64/bin/aarch64-linux-android-gcc
+          echo 'exec clang "$@"' >> /home/runner/gcc-64/bin/aarch64-linux-android-gcc
+          chmod +x /home/runner/gcc-64/bin/aarch64-linux-android-gcc
+          echo '#!/bin/sh' > /home/runner/gcc-64/bin/aarch64-linux-android-g++
+          echo 'exec clang++ "$@"' >> /home/runner/gcc-64/bin/aarch64-linux-android-g++
+          chmod +x /home/runner/gcc-64/bin/aarch64-linux-android-g++
+
       - uses: dabao1955/kernel_build_action@main
         with:
           kernel-url: https://github.com/fjrXTR/gki-5.10.git
-          kernel-dir: gki-src
+          kernel-dir: kernel
           kernel-branch: villhaze-new
           config: gki_defconfig
           arch: arm64
           android-version: 12
-          aosp-gcc: true
+          aosp-gcc: false
           aosp-clang: false
           disable-lto: false
           extra-make-args: >
