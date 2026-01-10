@@ -1,102 +1,128 @@
-name: Missionary-Zeta GKI
+name: zeta-missionary
 
 on:
   workflow_dispatch:
 
 jobs:
-  Build-Kernel:
+  build:
     runs-on: ubuntu-22.04
-    permissions:
-      contents: write
 
     steps:
       - uses: actions/checkout@v4
 
-      - run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/share/boost
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+      - name: Free space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost
+          sudo docker image prune -af
+          sudo apt clean
           df -h
 
-      - run: |
+      - name: Install deps
+        run: |
           sudo apt update
-          sudo apt install -y git make bc bison flex libssl-dev libelf-dev python3 zip ccache llvm lld zstd
+          sudo apt install -y git bc bison flex make curl zip python3 \
+            libssl-dev libelf-dev llvm lld ccache
 
-      - run: |
+      - name: Setup AOSP Clang 19
+        run: |
           mkdir -p /opt/clang
-          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 /tmp/aosp-clang
-          CLANG_DIR=$(ls /tmp/aosp-clang | grep '^clang-r' | sort -V | tail -n1)
-          cp -r /tmp/aosp-clang/$CLANG_DIR/* /opt/clang/
-          rm -rf /tmp/aosp-clang
-          chmod -R a+rX /opt/clang
+          curl -L https://github.com/esk-project/aosp-clang-prebuilts/releases/download/r450784d/clang-r450784d-linux-x86.tar.gz -o clang.tar.gz
+          tar -xf clang.tar.gz -C /opt/clang --strip-components=1
           echo "/opt/clang/bin" >> $GITHUB_PATH
+          clang --version
 
-      - run: |
-          echo "CC=/opt/clang/bin/clang" >> $GITHUB_ENV
-          echo "CXX=/opt/clang/bin/clang++" >> $GITHUB_ENV
-          echo "LD=/opt/clang/bin/ld.lld" >> $GITHUB_ENV
-          echo "LLVM=1" >> $GITHUB_ENV
-          echo "LLVM_IAS=1" >> $GITHUB_ENV
-          echo "LLVM_PARALLEL_LINK_JOBS=1" >> $GITHUB_ENV
-          echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
-          echo "CCACHE_MAXSIZE=2G" >> $GITHUB_ENV
+      - name: Clone kernel
+        run: |
+          git clone --depth=1 https://github.com/fjrXTR/gki-5.10 kernel
 
-      - run: |
-          git clone --depth=1 https://github.com/fjrXTR/gki-5.10.git kernel
-
-      - run: |
+      - name: Add KernelSU-Next
+        run: |
           rm -rf kernel/drivers/kernelsu
-          git clone --depth=1 https://github.com/tiann/KernelSU.git /tmp/ksu
-          mkdir -p kernel/drivers/kernelsu
-          cp -a /tmp/ksu/kernel/* kernel/drivers/kernelsu/
-          grep -q 'drivers/kernelsu/Kconfig' kernel/drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> kernel/drivers/Kconfig
-          grep -q 'kernelsu/' kernel/drivers/Makefile || echo 'obj-$(CONFIG_KSU) += kernelsu/' >> kernel/drivers/Makefile
-          rm -rf /tmp/ksu
+          git clone --depth=1 https://github.com/KernelSU-Next/KernelSU kernel/drivers/kernelsu
 
-      - run: |
-          set -e
+      - name: Build
+        run: |
           export ARCH=arm64
           export SUBARCH=arm64
-          export KCFLAGS="-O3 -pipe"
-          export KCPPFLAGS="-O3"
+          export LLVM=1
+          export LLVM_IAS=1
           export KBUILD_BUILD_USER=Zeta
           export KBUILD_BUILD_HOST=Missionary
+          export KBUILD_BUILD_VERSION=-✦zeta-missionary
+
+          export CC="ccache clang"
+          export CXX="ccache clang++"
+          export LD=ld.lld
+          export LDFLAGS="--threads=4"
+          export KCFLAGS="-O3"
+
+          export CCACHE_COMPRESS=1
+          export CCACHE_COMPRESSLEVEL=5
+          export CCACHE_MAXSIZE=8G
+
+          ccache -M 8G
+          ccache -z
 
           mkdir -p kernel/out
-          cd kernel
+          make -C kernel O=out gki_defconfig
 
-          make O=out gki_defconfig
+          ./kernel/scripts/config --file kernel/out/.config \
+            -e CONFIG_CC_IS_CLANG \
+            -e CONFIG_LD_LLD \
+            -e CONFIG_LTO_CLANG \
+            -e CONFIG_THINLTO \
+            -d CONFIG_LTO_CLANG_FULL \
+            -e CONFIG_UCLAMP_TASK \
+            -e CONFIG_SCHED_CORE \
+            -e CONFIG_SCHED_AUTOGROUP \
+            -e CONFIG_SCHED_HRTICK \
+            -e CONFIG_SCHED_MIGRATION_COST_NS \
+            -e CONFIG_PREEMPT \
+            -e CONFIG_PREEMPT_DYNAMIC \
+            -e CONFIG_PREEMPT_COUNT \
+            -e CONFIG_HZ \
+            -e CONFIG_HZ_250 \
+            -d CONFIG_HZ_300 \
+            -e CONFIG_NO_HZ_COMMON \
+            -e CONFIG_NO_HZ_IDLE \
+            -e CONFIG_HIGH_RES_TIMERS \
+            -e CONFIG_TICK_ONESHOT \
+            -e CONFIG_CPU_FREQ_GOV_SCHEDUTIL \
+            -e CONFIG_CPU_IDLE \
+            -e CONFIG_CPU_IDLE_GOV_MENU \
+            -e CONFIG_CPU_IDLE_GOV_TEO \
+            -e CONFIG_CGROUPS \
+            -e CONFIG_CGROUP_SCHED \
+            -e CONFIG_CGROUP_CPUACCT \
+            -e CONFIG_CGROUP_FREEZER \
+            -e CONFIG_CGROUP_BPF \
+            -e CONFIG_ZRAM \
+            -e CONFIG_ZRAM_DEF_COMP_LZ4 \
+            -e CONFIG_CRYPTO_LZ4 \
+            -e CONFIG_ARM64_PAN \
+            -e CONFIG_ARM64_UAO \
+            -e CONFIG_ARM64_PTR_AUTH \
+            -e CONFIG_ARM64_BTI \
+            -e CONFIG_VDSO \
+            -e CONFIG_OPTIMIZE_INLINING \
+            -e CONFIG_DISABLE_UNUSED_SYMBOLS \
+            -e CONFIG_KSU \
+            -e CONFIG_KSU_SUSFS \
+            -e CONFIG_KSU_MANUAL_HOOK
 
-          scripts/config --file out/.config \
-            -e CONFIG_LOCALVERSION="-✦zeta-missionary" \
-            -e CONFIG_CC_IS_CLANG -e CONFIG_LD_LLD \
-            -e CONFIG_LTO_CLANG -e CONFIG_LTO_CLANG_FULL -d CONFIG_THINLTO \
-            -e CONFIG_PREEMPT -e CONFIG_PREEMPT_DYNAMIC -e CONFIG_PREEMPT_COUNT \
-            -e CONFIG_HIGH_RES_TIMERS -e CONFIG_TICK_ONESHOT -e CONFIG_NO_HZ_COMMON -e CONFIG_NO_HZ_IDLE -e CONFIG_HZ_250 \
-            -e CONFIG_SCHED_AUTOGROUP -e CONFIG_SCHED_CORE -e CONFIG_UCLAMP_TASK \
-            -e CONFIG_CPU_FREQ -e CONFIG_CPU_FREQ_GOV_SCHEDUTIL \
-            -e CONFIG_CPU_IDLE -e CONFIG_CPU_IDLE_GOV_MENU -e CONFIG_CPU_IDLE_GOV_TEO \
-            -e CONFIG_RCU_EXPERT -e CONFIG_RCU_NOCB_CPU \
-            -e CONFIG_ZRAM -e CONFIG_ZRAM_DEF_COMP_LZ4 -e CONFIG_CRYPTO_LZ4 \
-            -e CONFIG_ARM64_PAN -e CONFIG_ARM64_UAO -e CONFIG_ARM64_PTR_AUTH -e CONFIG_ARM64_BTI \
-            -e CONFIG_KERNEL_ZSTD \
-            -e CONFIG_OPTIMIZE_INLINING -e CONFIG_DISABLE_UNUSED_SYMBOLS \
-            -d CONFIG_DEBUG_KERNEL -d CONFIG_KPROBES -d CONFIG_FTRACE -d CONFIG_FUNCTION_TRACER \
-            -e CONFIG_KSU -e CONFIG_KSU_SUSFS -e CONFIG_KSU_MANUAL_HOOK
+          make -C kernel O=out olddefconfig
+          make -C kernel O=out -j$(nproc --ignore=2)
 
-          make O=out olddefconfig
-          make O=out -j2
+          ccache -s
 
-      - run: |
-          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git anykernel3
-          cp kernel/out/arch/arm64/boot/Image anykernel3/
-          cp kernel/out/arch/arm64/boot/dtbo.img anykernel3/ || true
-          cd anykernel3
-          zip -r ../✦zeta-missionary-Kernel.zip *
+      - name: Pack AnyKernel
+        run: |
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3 anykernel
+          cp kernel/out/arch/arm64/boot/Image anykernel/
+          cd anykernel
+          zip -r ../zeta-missionary.zip *
 
       - uses: actions/upload-artifact@v4
         with:
-          name: zeta-missionary-kernel
-          path: ✦zeta-missionary-Kernel.zip
+          name: zeta-missionary
+          path: zeta-missionary.zip
