@@ -18,7 +18,7 @@ jobs:
           sudo apt update
           sudo apt install -y \
             git make bc bison flex libssl-dev libelf-dev \
-            clang lld llvm ccache python3 curl zip
+            clang-10 lld-10 llvm ccache python3 curl zip
 
       - name: Clone Kernel
         run: |
@@ -33,7 +33,7 @@ jobs:
         run: |
           export ARCH=arm64
           export SUBARCH=arm64
-          export CC=clang
+          export CC=clang-10
           export LD=ld.lld
           export LLVM=1
           export LLVM_IAS=1
