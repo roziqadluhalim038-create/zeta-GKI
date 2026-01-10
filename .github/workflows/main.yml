@@ -22,15 +22,12 @@ jobs:
 
       - run: |
           sudo apt update
-          sudo apt install -y \
-            git make bc bison flex libssl-dev libelf-dev \
-            python3 zip ccache llvm lld
+          sudo apt install -y git make bc bison flex libssl-dev libelf-dev python3 zip ccache llvm lld
 
       - run: |
           mkdir -p /opt/clang
           git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 /tmp/aosp-clang
           CLANG_DIR=$(ls /tmp/aosp-clang | grep '^clang-r' | sort -V | tail -n1)
-          echo "Using $CLANG_DIR"
           cp -r /tmp/aosp-clang/$CLANG_DIR/* /opt/clang/
           rm -rf /tmp/aosp-clang
           chmod -R a+rX /opt/clang
@@ -55,7 +52,6 @@ jobs:
           export SUBARCH=arm64
           export KCFLAGS="-O3 -pipe"
           export KCPPFLAGS="-O3"
-          export KBUILD_VERBOSE=0
           export KBUILD_BUILD_USER=Zeta
           export KBUILD_BUILD_HOST=Missionary
 
@@ -64,59 +60,24 @@ jobs:
 
           scripts/config --file kernel/out/.config \
             -e CONFIG_LOCALVERSION="-✦zeta-missionary" \
-            -e CONFIG_CC_IS_CLANG \
-            -e CONFIG_LD_LLD \
-            -e CONFIG_LTO_CLANG \
-            -e CONFIG_LTO_CLANG_FULL \
-            -d CONFIG_THINLTO \
-            -d CONFIG_GCC_PLUGINS \
-            -e CONFIG_PREEMPT \
-            -e CONFIG_PREEMPT_DYNAMIC \
-            -e CONFIG_PREEMPT_COUNT \
-            -e CONFIG_HIGH_RES_TIMERS \
-            -e CONFIG_TICK_ONESHOT \
-            -e CONFIG_NO_HZ_COMMON \
-            -e CONFIG_NO_HZ_IDLE \
-            -e CONFIG_HZ_300 \
-            -e CONFIG_SCHED_AUTOGROUP \
-            -e CONFIG_SCHED_CORE \
-            -e CONFIG_SCHED_HRTICK \
-            -e CONFIG_UCLAMP_TASK \
-            -e CONFIG_CPU_FREQ \
-            -e CONFIG_CPU_FREQ_GOV_SCHEDUTIL \
-            -e CONFIG_CPU_IDLE \
-            -e CONFIG_CPU_IDLE_GOV_MENU \
-            -e CONFIG_CPU_IDLE_GOV_TEO \
-            -e CONFIG_RCU_EXPERT \
-            -e CONFIG_RCU_NOCB_CPU \
-            -e CONFIG_RCU_BOOST \
-            -e CONFIG_RCU_BOOST_DELAY \
-            -e CONFIG_ZRAM \
-            -e CONFIG_ZRAM_DEF_COMP_LZ4 \
-            -e CONFIG_CRYPTO_LZ4 \
-            -e CONFIG_ARM64_PAN \
-            -e CONFIG_ARM64_UAO \
-            -e CONFIG_ARM64_PTR_AUTH \
-            -e CONFIG_ARM64_BTI \
-            -e CONFIG_OPTIMIZE_INLINING \
-            -e CONFIG_DISABLE_UNUSED_SYMBOLS \
-            -d CONFIG_DEBUG_KERNEL \
-            -d CONFIG_KPROBES \
-            -d CONFIG_FTRACE \
-            -d CONFIG_FUNCTION_TRACER \
-            -e CONFIG_KSU \
-            -e CONFIG_KSU_SUSFS \
-            -e CONFIG_KSU_MANUAL_HOOK
+            -e CONFIG_CC_IS_CLANG -e CONFIG_LD_LLD -e CONFIG_LTO_CLANG -e CONFIG_LTO_CLANG_FULL \
+            -d CONFIG_THINLTO -d CONFIG_GCC_PLUGINS \
+            -e CONFIG_PREEMPT -e CONFIG_PREEMPT_DYNAMIC -e CONFIG_PREEMPT_COUNT \
+            -e CONFIG_HIGH_RES_TIMERS -e CONFIG_TICK_ONESHOT -e CONFIG_NO_HZ_COMMON -e CONFIG_NO_HZ_IDLE -e CONFIG_HZ_250 \
+            -e CONFIG_SCHED_AUTOGROUP -e CONFIG_SCHED_CORE -e CONFIG_SCHED_HRTICK -e CONFIG_UCLAMP_TASK \
+            -e CONFIG_CPU_FREQ -e CONFIG_CPU_FREQ_GOV_SCHEDUTIL -e CONFIG_CPU_IDLE -e CONFIG_CPU_IDLE_GOV_MENU -e CONFIG_CPU_IDLE_GOV_TEO \
+            -e CONFIG_RCU_EXPERT -e CONFIG_RCU_NOCB_CPU -e CONFIG_RCU_BOOST -e CONFIG_RCU_BOOST_DELAY \
+            -e CONFIG_ZRAM -e CONFIG_ZRAM_DEF_COMP_LZ4 -e CONFIG_CRYPTO_LZ4 \
+            -e CONFIG_ARM64_PAN -e CONFIG_ARM64_UAO -e CONFIG_ARM64_PTR_AUTH -e CONFIG_ARM64_BTI \
+            -e CONFIG_OPTIMIZE_INLINING -e CONFIG_DISABLE_UNUSED_SYMBOLS \
+            -d CONFIG_DEBUG_KERNEL -d CONFIG_KPROBES -d CONFIG_FTRACE -d CONFIG_FUNCTION_TRACER \
+            -e CONFIG_KSU -e CONFIG_KSU_SUSFS -e CONFIG_KSU_MANUAL_HOOK
 
           make -C kernel O=out olddefconfig
           make -C kernel O=out -j$(nproc --ignore=2)
 
       - run: |
-          rm -rf kernel/out/.tmp_versions
-          rm -rf kernel/out/tools
-          rm -rf kernel/out/scripts
-          rm -rf kernel/out/fs
-          rm -rf kernel/out/net
+          rm -rf kernel/out/.tmp_versions kernel/out/tools kernel/out/scripts kernel/out/fs kernel/out/net
           df -h
 
       - run: |
@@ -128,19 +89,8 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ✦zeta-missionary Kernel
-          path: ✦zeta-missionary-Kernel.zip            -d CONFIG_FTRACE \
-            -d CONFIG_FUNCTION_TRACER \
-            \
-            # === KERNELSU === \
-            -e CONFIG_KSU \
-            -e CONFIG_KSU_SUSFS \
-            -e CONFIG_KSU_MANUAL_HOOK
-
-          make -C kernel O=out olddefconfig
-          make -C kernel O=out -j$(nproc --ignore=2)
-
-      # ===== CLEANUP =====
+          name: zeta-missionary-kernel
+          path: ✦zeta-missionary-Kernel.zip      # ===== CLEANUP =====
       - name: Cleanup build artifacts
         run: |
           rm -rf kernel/out/.tmp_versions
