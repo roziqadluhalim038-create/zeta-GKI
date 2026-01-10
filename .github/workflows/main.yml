@@ -12,49 +12,65 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Free space
+      - name: Free disk & prep
         run: |
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost || true
+          sudo apt-get -y autoremove || true
           sudo apt clean || true
           df -h
 
-      - name: Install deps
+      - name: Install base deps
         run: |
           sudo apt update
-          sudo apt install -y git bc bison flex curl wget libssl-dev libelf-dev \
-            clang lld llvm ccache python3 zip make build-essential xz-utils
+          sudo apt install -y git bc bison flex curl wget gnupg lsb-release \
+            xz-utils build-essential libssl-dev libelf-dev ccache python3 zip make
 
-      - name: Setup ccache
+      - name: Install LLVM/Clang 19 from apt.llvm.org
+        run: |
+          set -e
+          wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          sudo add-apt-repository "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-19 main"
+          sudo apt update
+          sudo apt install -y clang-19 lld-19 llvm-19
+          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-19 100
+          sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-19 100
+          sudo update-alternatives --install /usr/bin/ld.lld ld.lld /usr/bin/ld.lld-19 100
+          clang --version || true
+          ld.lld --version || true
+
+      - name: Setup ccache env
         run: |
           echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
           echo "CCACHE_MAXSIZE=10G" >> $GITHUB_ENV
+          echo "CCACHE_COMPRESS=1" >> $GITHUB_ENV
           ccache -M 10G || true
 
-      - name: Clone Valhaze base
+      - name: Clone Valhaze base (stable)
         run: |
           rm -rf kernel || true
           git clone --depth=1 https://github.com/fjrXTR/v1llx-gki-5.10 kernel
 
-      - name: Add KernelSU-Next (robust)
+      - name: Install KernelSU-Next (must exist before defconfig)
         run: |
           set -e
           rm -rf kernel/drivers/kernelsu || true
           mkdir -p kernel/drivers
-          # try several repos
+
+          # Try clones first
           if git clone --depth=1 https://github.com/KernelSU-Next/KernelSU.git kernel/drivers/kernelsu 2>/dev/null; then
-            echo "Cloned KernelSU-Next"
+            echo "Cloned KernelSU-Next (official)"
           elif git clone --depth=1 https://github.com/tiann/KernelSU.git kernel/drivers/kernelsu 2>/dev/null; then
             echo "Cloned tiann/KernelSU"
           elif git clone --depth=1 https://github.com/RapliVx/KernelSU.git kernel/drivers/kernelsu 2>/dev/null; then
             echo "Cloned RapliVx/KernelSU"
           else
-            echo "git clone failed for KernelSU repos — trying archive fallback"
+            echo "git clone failed for KernelSU repos — trying archive fallbacks"
             TMPDIR=$(mktemp -d)
-            ARCHIVES="https://github.com/KernelSU-Next/KernelSU/archive/refs/heads/main.tar.gz https://github.com/tiann/KernelSU/archive/refs/heads/main.tar.gz https://github.com/RapliVx/KernelSU/archive/refs/heads/main.tar.gz"
             GOT=0
-            for A in $ARCHIVES; do
-              echo "Trying $A"
-              if curl -fL --retry 3 "$A" -o "$TMPDIR/ksu.tar.gz"; then
+            for REPO in "KernelSU-Next/KernelSU" "tiann/KernelSU" "RapliVx/KernelSU"; do
+              ARCHIVE="https://github.com/${REPO}/archive/refs/heads/main.tar.gz"
+              echo "Trying $ARCHIVE"
+              if curl -fL --retry 3 "$ARCHIVE" -o "$TMPDIR/ksu.tar.gz"; then
                 mkdir -p "$TMPDIR/ksu"
                 tar -xzf "$TMPDIR/ksu.tar.gz" -C "$TMPDIR/ksu" || true
                 SRCROOT=$(find "$TMPDIR/ksu" -maxdepth 2 -type d -name "KernelSU*" | head -n1 || true)
@@ -74,21 +90,20 @@ jobs:
                   break
                 fi
               else
-                echo "Archive $A not available"
+                echo "Archive $ARCHIVE not available"
               fi
             done
             rm -rf "$TMPDIR" || true
+
             if [ "$GOT" -ne 1 ]; then
-              echo "KernelSU not available remotely — creating minimal stub to avoid build failure"
+              echo "WARNING: KernelSU sources not found remotely — creating minimal stub to avoid build failure"
               mkdir -p kernel/drivers/kernelsu/src || true
-              echo 'config KSU' > kernel/drivers/kernelsu/Kconfig
-              echo '    bool "KernelSU (stub)"' >> kernel/drivers/kernelsu/Kconfig
-              echo '    default y' >> kernel/drivers/kernelsu/Kconfig
-              echo 'obj-$(CONFIG_KSU) += kernelsu/' > kernel/drivers/kernelsu/Makefile
-              echo 'kernelsu-y := src/ksu_stub.o' >> kernel/drivers/kernelsu/Makefile
-              printf '%s\n' "#include <linux/module.h>" "static int __init ksu_stub_init(void) { return 0; }" "static void __exit ksu_stub_exit(void) {}" "module_init(ksu_stub_init);" "module_exit(ksu_stub_exit);" "MODULE_LICENSE(\"GPL\");" > kernel/drivers/kernelsu/src/ksu_stub.c
+              printf '%s\n' 'config KSU' '    bool "KernelSU (stub)"' '    default y' > kernel/drivers/kernelsu/Kconfig
+              printf '%s\n' '# minimal Makefile stub' 'obj-$(CONFIG_KSU) += kernelsu/' 'kernelsu-y := src/ksu_stub.o' > kernel/drivers/kernelsu/Makefile
+              printf '%s\n' '#include <linux/module.h>' 'static int __init ksu_stub_init(void) { return 0; }' 'static void __exit ksu_stub_exit(void) {}' 'module_init(ksu_stub_init);' 'module_exit(ksu_stub_exit);' 'MODULE_LICENSE("GPL");' > kernel/drivers/kernelsu/src/ksu_stub.c
             fi
           fi
+
           # ensure drivers/Kconfig and drivers/Makefile reference kernelsu
           if ! grep -Fq 'drivers/kernelsu/Kconfig' kernel/drivers/Kconfig 2>/dev/null ; then
             echo 'source "drivers/kernelsu/Kconfig"' >> kernel/drivers/Kconfig
@@ -96,9 +111,11 @@ jobs:
           if ! grep -Fq 'obj-$(CONFIG_KSU) += kernelsu/' kernel/drivers/Makefile 2>/dev/null ; then
             echo 'obj-$(CONFIG_KSU) += kernelsu/' >> kernel/drivers/Makefile
           fi
-          ls -la kernel/drivers/kernelsu || true
 
-      - name: Set kernel localversion
+          echo "kernel/drivers/kernelsu contents:"
+          ls -la kernel/drivers/kernelsu | sed -n '1,200p' || true
+
+      - name: Set kernel localversion (with ✦ in kernel string)
         run: |
           if grep -q '^CONFIG_LOCALVERSION' kernel/arch/arm64/configs/gki_defconfig 2>/dev/null; then
             sed -i 's/^CONFIG_LOCALVERSION.*/CONFIG_LOCALVERSION="-zeta-✦missionary"/' kernel/arch/arm64/configs/gki_defconfig || true
@@ -106,7 +123,7 @@ jobs:
             echo 'CONFIG_LOCALVERSION="-zeta-✦missionary"' >> kernel/arch/arm64/configs/gki_defconfig
           fi
 
-      - name: Configure kernel (ThinLTO + tuning)
+      - name: Configure kernel (ThinLTO + full tuning)
         run: |
           export ARCH=arm64
           export LLVM=1
@@ -114,8 +131,60 @@ jobs:
           export CC=clang
           export CXX=clang++
           export LD=ld.lld
+          export LLVM_PARALLEL_LINK_JOBS=1
+
           make -C kernel O=out gki_defconfig
-          kernel/scripts/config --file kernel/out/.config -e CONFIG_CC_IS_CLANG -e CONFIG_LD_LLD -e CONFIG_LTO_CLANG -e CONFIG_THINLTO -d CONFIG_LTO_CLANG_FULL -e CONFIG_PREEMPT -e CONFIG_PREEMPT_DYNAMIC -e CONFIG_PREEMPT_COUNT -e CONFIG_HZ_250 -e CONFIG_NO_HZ_COMMON -e CONFIG_NO_HZ_IDLE -e CONFIG_HIGH_RES_TIMERS -e CONFIG_TICK_ONESHOT -e CONFIG_SCHED_AUTOGROUP -e CONFIG_SCHED_CORE -e CONFIG_SCHED_HRTICK -e CONFIG_UCLAMP_TASK -e CONFIG_CPU_FREQ_GOV_SCHEDUTIL -e CONFIG_CPU_IDLE -e CONFIG_CPU_IDLE_GOV_MENU -e CONFIG_CPU_IDLE_GOV_TEO -e CONFIG_RCU_EXPERT -e CONFIG_RCU_BOOST -e CONFIG_RCU_BOOST_DELAY -e CONFIG_RCU_NOCB_CPU -e CONFIG_CGROUPS -e CONFIG_CGROUP_SCHED -e CONFIG_CGROUP_CPUACCT -e CONFIG_CGROUP_FREEZER -e CONFIG_CGROUP_BPF -e CONFIG_NAMESPACES -e CONFIG_USER_NS -e CONFIG_PID_NS -e CONFIG_NET_NS -e CONFIG_IPC_NS -e CONFIG_ZRAM -e CONFIG_ZRAM_DEF_COMP_LZ4 -e CONFIG_CRYPTO_LZ4 -e CONFIG_ARM64_PAN -e CONFIG_ARM64_UAO -e CONFIG_ARM64_PTR_AUTH -e CONFIG_ARM64_BTI -e CONFIG_VDSO -e CONFIG_OPTIMIZE_INLINING -e CONFIG_DISABLE_UNUSED_SYMBOLS -e CONFIG_KSU -e CONFIG_KSU_SUSFS -e CONFIG_KSU_MANUAL_HOOK
+
+          kernel/scripts/config --file kernel/out/.config \
+            -e CONFIG_CC_IS_CLANG \
+            -e CONFIG_LD_LLD \
+            -e CONFIG_LTO_CLANG \
+            -e CONFIG_THINLTO \
+            -d CONFIG_LTO_CLANG_FULL \
+            -e CONFIG_PREEMPT \
+            -e CONFIG_PREEMPT_DYNAMIC \
+            -e CONFIG_PREEMPT_COUNT \
+            -e CONFIG_HZ_250 \
+            -e CONFIG_NO_HZ_COMMON \
+            -e CONFIG_NO_HZ_IDLE \
+            -e CONFIG_HIGH_RES_TIMERS \
+            -e CONFIG_TICK_ONESHOT \
+            -e CONFIG_SCHED_AUTOGROUP \
+            -e CONFIG_SCHED_CORE \
+            -e CONFIG_SCHED_HRTICK \
+            -e CONFIG_UCLAMP_TASK \
+            -e CONFIG_CPU_FREQ_GOV_SCHEDUTIL \
+            -e CONFIG_CPU_IDLE \
+            -e CONFIG_CPU_IDLE_GOV_MENU \
+            -e CONFIG_CPU_IDLE_GOV_TEO \
+            -e CONFIG_RCU_EXPERT \
+            -e CONFIG_RCU_BOOST \
+            -e CONFIG_RCU_BOOST_DELAY \
+            -e CONFIG_RCU_NOCB_CPU \
+            -e CONFIG_CGROUPS \
+            -e CONFIG_CGROUP_SCHED \
+            -e CONFIG_CGROUP_CPUACCT \
+            -e CONFIG_CGROUP_FREEZER \
+            -e CONFIG_CGROUP_BPF \
+            -e CONFIG_NAMESPACES \
+            -e CONFIG_USER_NS \
+            -e CONFIG_PID_NS \
+            -e CONFIG_NET_NS \
+            -e CONFIG_IPC_NS \
+            -e CONFIG_ZRAM \
+            -e CONFIG_ZRAM_DEF_COMP_LZ4 \
+            -e CONFIG_CRYPTO_LZ4 \
+            -e CONFIG_ARM64_PAN \
+            -e CONFIG_ARM64_UAO \
+            -e CONFIG_ARM64_PTR_AUTH \
+            -e CONFIG_ARM64_BTI \
+            -e CONFIG_VDSO \
+            -e CONFIG_OPTIMIZE_INLINING \
+            -e CONFIG_DISABLE_UNUSED_SYMBOLS \
+            -e CONFIG_KSU \
+            -e CONFIG_KSU_SUSFS \
+            -e CONFIG_KSU_MANUAL_HOOK
+
           make -C kernel O=out olddefconfig
 
       - name: Build kernel (RAM-safe)
@@ -140,4 +209,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: zeta-missionary
-          path: zeta-missionary.zip
+          path: zeta-missionary.zip          path: zeta-missionary.zip
