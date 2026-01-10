@@ -6,141 +6,118 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    permissions:
-      contents: write
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Free space
         run: |
-          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost || true
-          sudo apt clean || true
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost
+          sudo apt clean
           df -h
 
       - name: Install deps
         run: |
           sudo apt update
           sudo apt install -y git bc bison flex curl wget libssl-dev libelf-dev \
-            clang lld llvm ccache python3 zip make build-essential xz-utils
+            clang lld llvm ccache python3 zip make build-essential
 
       - name: Setup ccache
         run: |
           echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
           echo "CCACHE_MAXSIZE=10G" >> $GITHUB_ENV
-          ccache -M 10G || true
+          ccache -M 10G
 
-      - name: Clone Valhaze GKI (stable)
+      - name: Clone Valhaze base
         run: |
           git clone --depth=1 https://github.com/fjrXTR/v1llx-gki-5.10 kernel
 
-      - name: Add KernelSU-Next (robust)
+      - name: Add KernelSU-Next
         run: |
-          set -e
-          rm -rf kernel/drivers/kernelsu || true
-          mkdir -p kernel/drivers
+          rm -rf kernel/drivers/kernelsu
+          git clone --depth=1 https://github.com/KernelSU-Next/KernelSU kernel/drivers/kernelsu || \
+          git clone --depth=1 https://github.com/tiann/KernelSU kernel/drivers/kernelsu
 
-          REPOS=(
-            "https://github.com/KernelSU-Next/KernelSU.git"
-            "https://github.com/tiann/KernelSU.git"
-            "https://github.com/RapliVx/KernelSU.git"
-          )
-
-          GOT=0
-          for R in "${REPOS[@]}"; do
-            echo "Trying git clone $R ..."
-            if git clone --depth=1 "$R" kernel/drivers/kernelsu 2>/dev/null; then
-              echo "Cloned $R"
-              GOT=1
-              break
-            fi
-          done
-
-          if [ "$GOT" -eq 0 ]; then
-            echo "git clone failed for all repos — trying archive downloads ..."
-            TMPDIR=$(mktemp -d)
-            for OWNER_REPO in "KernelSU-Next/KernelSU" "tiann/KernelSU" "RapliVx/KernelSU"; do
-              for BR in main master; do
-                ARCHIVE="https://github.com/${OWNER_REPO}/archive/refs/heads/${BR}.tar.gz"
-                echo "Trying $ARCHIVE ..."
-                if curl -fL --retry 3 "$ARCHIVE" -o "$TMPDIR/ksu.tar.gz"; then
-                  mkdir -p "$TMPDIR/ksu"
-                  tar -xzf "$TMPDIR/ksu.tar.gz" -C "$TMPDIR/ksu" || true
-                  SRCROOT=$(find "$TMPDIR/ksu" -maxdepth 2 -type d -name "KernelSU*" | head -n1 || true)
-                  if [ -z "$SRCROOT" ]; then
-                    SRCROOT=$(find "$TMPDIR/ksu" -maxdepth 2 -type d | head -n1 || true)
-                  fi
-                  if [ -n "$SRCROOT" ] && [ -d "$SRCROOT/kernel" ]; then
-                    mkdir -p kernel/drivers/kernelsu
-                    cp -a "$SRCROOT/kernel/"* kernel/drivers/kernelsu/ || true
-                    GOT=1
-                    break 2
-                  elif [ -n "$SRCROOT" ] && [ -d "$SRCROOT/drivers/kernelsu" ]; then
-                    mkdir -p kernel/drivers/kernelsu
-                    cp -a "$SRCROOT/drivers/kernelsu/"* kernel/drivers/kernelsu/ || true
-                    GOT=1
-                    break 2
-                  elif [ -n "$SRCROOT" ]; then
-                    mkdir -p kernel/drivers/kernelsu
-                    cp -a "$SRCROOT/"* kernel/drivers/kernelsu/ || true
-                    GOT=1
-                    break 2
-                  fi
-                else
-                  echo "Archive $ARCHIVE not available (404 or network)."
-                fi
-              done
-            done
-            rm -rf "$TMPDIR" || true
+          if [ ! -f kernel/drivers/kernelsu/Kconfig ]; then
+            echo "KernelSU missing, abort"
+            exit 1
           fi
 
-          if [ "$GOT" -eq 0 ]; then
-            echo "WARNING: KernelSU sources not found. Creating minimal stub to avoid build failure."
-            mkdir -p kernel/drivers/kernelsu/src || true
-            cat > kernel/drivers/kernelsu/Kconfig <<'EOF'
-config KSU
-    bool "KernelSU (stub)"
-    default y
-    help
-      Minimal placeholder Kconfig to satisfy build when KernelSU sources cannot be fetched.
-EOF
-            cat > kernel/drivers/kernelsu/Makefile <<'EOF'
-# minimal Makefile stub for kernelsu
-obj-$(CONFIG_KSU) += kernelsu/
-kernelsu-y := src/ksu_stub.o
-EOF
-            cat > kernel/drivers/kernelsu/src/ksu_stub.c <<'EOF'
-/* minimal stub to avoid build break when KernelSU cannot be fetched */
-#include <linux/module.h>
-static int __init ksu_stub_init(void) { return 0; }
-static void __exit ksu_stub_exit(void) {}
-module_init(ksu_stub_init);
-module_exit(ksu_stub_exit);
-MODULE_LICENSE("GPL");
-EOF
-          fi
-
-          if ! grep -Fq 'drivers/kernelsu/Kconfig' kernel/drivers/Kconfig 2>/dev/null ; then
-            echo 'source "drivers/kernelsu/Kconfig"' >> kernel/drivers/Kconfig
-          fi
-          if ! grep -Fq 'obj-$(CONFIG_KSU) += kernelsu/' kernel/drivers/Makefile 2>/dev/null ; then
-            echo 'obj-$(CONFIG_KSU) += kernelsu/' >> kernel/drivers/Makefile
-          fi
-
-          echo "kernel/drivers/kernelsu contents:"
-          ls -la kernel/drivers/kernelsu | sed -n '1,200p' || true
+          grep -q kernelsu kernel/drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> kernel/drivers/Kconfig
+          grep -q kernelsu kernel/drivers/Makefile || echo 'obj-$(CONFIG_KSU) += kernelsu/' >> kernel/drivers/Makefile
 
       - name: Set kernel name
         run: |
-          sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-zeta-✦missionary"/' kernel/arch/arm64/configs/gki_defconfig || true
+          sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-zeta-✦missionary"/' kernel/arch/arm64/configs/gki_defconfig
 
-      - name: Configure kernel (ThinLTO + tuning)
+      - name: Configure kernel
         run: |
           export ARCH=arm64
           export LLVM=1
           export LLVM_IAS=1
-          export CC=clang
-          export CXX=clang++
+
+          make -C kernel O=out gki_defconfig
+
+          kernel/scripts/config --file kernel/out/.config \
+            -e CONFIG_CC_IS_CLANG \
+            -e CONFIG_LD_LLD \
+            -e CONFIG_LTO_CLANG \
+            -e CONFIG_THINLTO \
+            -d CONFIG_LTO_CLANG_FULL \
+            -e CONFIG_PREEMPT \
+            -e CONFIG_PREEMPT_DYNAMIC \
+            -e CONFIG_PREEMPT_COUNT \
+            -e CONFIG_HZ_250 \
+            -e CONFIG_NO_HZ_COMMON \
+            -e CONFIG_NO_HZ_IDLE \
+            -e CONFIG_HIGH_RES_TIMERS \
+            -e CONFIG_SCHED_AUTOGROUP \
+            -e CONFIG_SCHED_CORE \
+            -e CONFIG_SCHED_HRTICK \
+            -e CONFIG_UCLAMP_TASK \
+            -e CONFIG_CPU_FREQ_GOV_SCHEDUTIL \
+            -e CONFIG_CPU_IDLE \
+            -e CONFIG_CPU_IDLE_GOV_MENU \
+            -e CONFIG_CPU_IDLE_GOV_TEO \
+            -e CONFIG_RCU_EXPERT \
+            -e CONFIG_RCU_BOOST \
+            -e CONFIG_RCU_NOCB_CPU \
+            -e CONFIG_ZRAM \
+            -e CONFIG_ZRAM_DEF_COMP_LZ4 \
+            -e CONFIG_CRYPTO_LZ4 \
+            -e CONFIG_ARM64_PAN \
+            -e CONFIG_ARM64_UAO \
+            -e CONFIG_ARM64_PTR_AUTH \
+            -e CONFIG_ARM64_BTI \
+            -e CONFIG_VDSO \
+            -e CONFIG_OPTIMIZE_INLINING \
+            -e CONFIG_DISABLE_UNUSED_SYMBOLS \
+            -e CONFIG_KSU
+
+          make -C kernel O=out olddefconfig
+
+      - name: Build
+        run: |
+          export ARCH=arm64
+          export LLVM=1
+          export LLVM_IAS=1
+          export CC="ccache clang"
+          export CXX="ccache clang++"
+          export LD=ld.lld
+          make -C kernel O=out -j$(nproc --ignore=2)
+
+      - name: Pack
+        run: |
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3 ak3
+          cp kernel/out/arch/arm64/boot/Image ak3/
+          cd ak3
+          zip -r ../zeta-missionary.zip *
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: zeta-missionary
+          path: zeta-missionary.zip          export CXX=clang++
           export LD=ld.lld
 
           make -C kernel O=out gki_defconfig
