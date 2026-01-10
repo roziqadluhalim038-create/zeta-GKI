@@ -1,1 +1,38 @@
-.github/workflows/build.yml
+name: Missionary-Zeta GKI
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Clang
+        run: |
+          mkdir -p /opt/clang
+          curl -fsSL https://storage.googleapis.com/android-clang/clang-r522817-linux-x86.tar.gz -o /tmp/clang.tar.gz
+          tar -xzf /tmp/clang.tar.gz -C /opt/clang --strip-components=1
+          echo "/opt/clang/bin" >> $GITHUB_PATH
+
+      - name: Build Kernel
+        uses: dabao1955/kernel_build_action@main
+        with:
+          kernel-url: https://github.com/ramabondanp/android_kernel_common-5.10.git
+          kernel-dir: common
+          kernel-branch: android12-5.10
+          config: gki_defconfig
+          arch: arm64
+          android-version: 15
+          aosp-gcc: false
+          aosp-clang: false
+          aosp-clang-version: r522817
+          ksu: true
+          ksu-version: master
+          ksu-other: true
+          ksu-url: https://github.com/RapliVx/KernelSU
+          anykernel3: true
