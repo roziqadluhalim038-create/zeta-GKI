@@ -15,7 +15,10 @@ jobs:
       - name: Install clang 21
         run: |
           sudo apt update
-          sudo apt install -y clang-21 lld-21
+          sudo apt install -y wget gnupg lsb-release
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 21
           sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-21 100
           sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-21 100
           sudo update-alternatives --install /usr/bin/ld.lld ld.lld /usr/bin/ld.lld-21 100
@@ -33,8 +36,7 @@ jobs:
           aosp-clang: false
           disable-lto: false
           extra-make-args: >
-            LLVM=1 LLVM_IAS=1
-            WERROR=0
+            LLVM=1 LLVM_IAS=1 WERROR=0
             CONFIG_LOCALVERSION=✦-Missionary-Zeta
             CONFIG_LTO_CLANG=y
             CONFIG_LTO_CLANG_FULL=y
