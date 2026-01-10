@@ -1,4 +1,4 @@
-name: zeta-missionary
+name: ✦zeta-missionary GKI
 
 on:
   workflow_dispatch:
@@ -10,91 +10,77 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Free space
-        run: |
-          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost
-          sudo docker image prune -af
-          sudo apt clean
-          df -h
-
       - name: Install deps
         run: |
           sudo apt update
-          sudo apt install -y git bc bison flex make curl zip python3 \
-            libssl-dev libelf-dev llvm lld ccache xz-utils
+          sudo apt install -y git bc bison flex libssl-dev libelf-dev \
+          llvm lld clang ccache python3 zip make gcc
 
-      - name: Setup Clang 19
+      - name: Setup ccache
         run: |
-          mkdir -p /opt/clang
-          curl -L https://github.com/ClangBuiltLinux/llvm-project/releases/download/llvmorg-19.1.7/clang+llvm-19.1.7-x86_64-linux-gnu.tar.xz -o clang.tar.xz
-          tar -xf clang.tar.xz -C /opt/clang --strip-components=1
-          echo "/opt/clang/bin" >> $GITHUB_PATH
-          clang --version
+          echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
+          echo "CCACHE_COMPRESS=1" >> $GITHUB_ENV
+          echo "CCACHE_MAXSIZE=10G" >> $GITHUB_ENV
 
-      - name: Clone kernel
+      - name: Clone Valhaze GKI
         run: |
-          git clone --depth=1 https://github.com/fjrXTR/gki-5.10 kernel
+          git clone --depth=1 -b main https://github.com/fjrXTR/v1llx-gki-5.10 kernel
 
       - name: Add KernelSU-Next
         run: |
-          rm -rf kernel/drivers/kernelsu
-          git clone --depth=1 https://github.com/KernelSU-Next/KernelSU kernel/drivers/kernelsu
+          cd kernel
+          curl -LSs https://raw.githubusercontent.com/KernelSU-Next/KernelSU/main/kernel/setup.sh | bash
 
-      - name: Build
+      - name: Kernel name
+        run: |
+          sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-✦zeta-missionary"/' kernel/arch/arm64/configs/gki_defconfig
+
+      - name: Generate config
         run: |
           export ARCH=arm64
-          export SUBARCH=arm64
           export LLVM=1
           export LLVM_IAS=1
-          export KBUILD_BUILD_USER=Zeta
-          export KBUILD_BUILD_HOST=Missionary
-          export KBUILD_BUILD_VERSION=-✦zeta-missionary
-
-          export CC="ccache clang"
-          export CXX="ccache clang++"
+          export CC=clang
+          export CXX=clang++
           export LD=ld.lld
-          export LDFLAGS="--threads=4"
-          export KCFLAGS="-O3"
 
-          export CCACHE_COMPRESS=1
-          export CCACHE_COMPRESSLEVEL=5
-          export CCACHE_MAXSIZE=8G
-
-          ccache -M 8G
-          ccache -z
-
-          mkdir -p kernel/out
           make -C kernel O=out gki_defconfig
 
-          ./kernel/scripts/config --file kernel/out/.config \
+          kernel/scripts/config --file kernel/out/.config \
             -e CONFIG_CC_IS_CLANG \
             -e CONFIG_LD_LLD \
             -e CONFIG_LTO_CLANG \
             -e CONFIG_THINLTO \
             -d CONFIG_LTO_CLANG_FULL \
-            -e CONFIG_UCLAMP_TASK \
-            -e CONFIG_SCHED_CORE \
-            -e CONFIG_SCHED_AUTOGROUP \
-            -e CONFIG_SCHED_HRTICK \
-            -e CONFIG_SCHED_MIGRATION_COST_NS \
             -e CONFIG_PREEMPT \
             -e CONFIG_PREEMPT_DYNAMIC \
             -e CONFIG_PREEMPT_COUNT \
             -e CONFIG_HZ_250 \
-            -d CONFIG_HZ_300 \
             -e CONFIG_NO_HZ_COMMON \
             -e CONFIG_NO_HZ_IDLE \
             -e CONFIG_HIGH_RES_TIMERS \
-            -e CONFIG_TICK_ONESHOT \
+            -e CONFIG_SCHED_AUTOGROUP \
+            -e CONFIG_SCHED_CORE \
+            -e CONFIG_SCHED_HRTICK \
+            -e CONFIG_UCLAMP_TASK \
             -e CONFIG_CPU_FREQ_GOV_SCHEDUTIL \
             -e CONFIG_CPU_IDLE \
             -e CONFIG_CPU_IDLE_GOV_MENU \
             -e CONFIG_CPU_IDLE_GOV_TEO \
+            -e CONFIG_RCU_EXPERT \
+            -e CONFIG_RCU_BOOST \
+            -e CONFIG_RCU_BOOST_DELAY \
+            -e CONFIG_RCU_NOCB_CPU \
             -e CONFIG_CGROUPS \
             -e CONFIG_CGROUP_SCHED \
             -e CONFIG_CGROUP_CPUACCT \
             -e CONFIG_CGROUP_FREEZER \
             -e CONFIG_CGROUP_BPF \
+            -e CONFIG_NAMESPACES \
+            -e CONFIG_USER_NS \
+            -e CONFIG_PID_NS \
+            -e CONFIG_NET_NS \
+            -e CONFIG_IPC_NS \
             -e CONFIG_ZRAM \
             -e CONFIG_ZRAM_DEF_COMP_LZ4 \
             -e CONFIG_CRYPTO_LZ4 \
@@ -109,6 +95,31 @@ jobs:
             -e CONFIG_KSU_SUSFS \
             -e CONFIG_KSU_MANUAL_HOOK
 
+          make -C kernel O=out olddefconfig
+
+      - name: Build kernel
+        run: |
+          export ARCH=arm64
+          export LLVM=1
+          export LLVM_IAS=1
+          export CC="ccache clang"
+          export CXX="ccache clang++"
+          export LD=ld.lld
+
+          make -C kernel O=out -j$(nproc --ignore=2)
+
+      - name: Pack AnyKernel3
+        run: |
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3
+          cp kernel/out/arch/arm64/boot/Image AnyKernel3/
+          cd AnyKernel3
+          zip -r ../✦zeta-missionary.zip *
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: ✦zeta-missionary
+          path: ✦zeta-missionary.zip
           make -C kernel O=out olddefconfig
           make -C kernel O=out -j$(nproc --ignore=2)
           ccache -s
