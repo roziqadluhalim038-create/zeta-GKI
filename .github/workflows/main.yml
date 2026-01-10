@@ -1,4 +1,4 @@
-name: ✦zeta-missionary GKI
+name: zeta-missionary
 
 on:
   workflow_dispatch:
@@ -33,7 +33,7 @@ jobs:
 
       - name: Kernel name
         run: |
-          sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-✦zeta-missionary"/' kernel/arch/arm64/configs/gki_defconfig
+          sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-zeta-missionary"/' kernel/arch/arm64/configs/gki_defconfig
 
       - name: Generate config
         run: |
@@ -113,25 +113,10 @@ jobs:
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3
           cp kernel/out/arch/arm64/boot/Image AnyKernel3/
           cd AnyKernel3
-          zip -r ../✦zeta-missionary.zip *
+          zip -r ../zeta-missionary.zip *
 
       - name: Upload
         uses: actions/upload-artifact@v4
-        with:
-          name: ✦zeta-missionary
-          path: ✦zeta-missionary.zip
-          make -C kernel O=out olddefconfig
-          make -C kernel O=out -j$(nproc --ignore=2)
-          ccache -s
-
-      - name: Pack AnyKernel
-        run: |
-          git clone --depth=1 https://github.com/osm0sis/AnyKernel3 anykernel
-          cp kernel/out/arch/arm64/boot/Image anykernel/
-          cd anykernel
-          zip -r ../zeta-missionary.zip *
-
-      - uses: actions/upload-artifact@v4
         with:
           name: zeta-missionary
           path: zeta-missionary.zip
