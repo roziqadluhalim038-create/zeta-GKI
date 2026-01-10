@@ -23,7 +23,7 @@ jobs:
       - name: Setup AOSP Clang 19
         run: |
           mkdir -p /opt/clang
-          curl -fSL "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android12-release/clang-r450784.tar.gz" \
+          curl -fSL "https://github.com/esk-project/aosp-clang-prebuilts/releases/download/r450784/clang-r450784-linux-x86.tar.gz" \
             -o /tmp/clang19.tar.gz
           tar -xzf /tmp/clang19.tar.gz -C /opt/clang --strip-components=1
           chmod -R a+rX /opt/clang
