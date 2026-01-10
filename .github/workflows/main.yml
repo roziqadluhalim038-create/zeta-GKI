@@ -48,7 +48,6 @@ jobs:
           export LLVM_IAS=1
           make -C kernel O=out infinix_X6871_defconfig
           
-          # Using a single long command string to avoid backslash syntax errors
           kernel/scripts/config --file kernel/out/.config \
             -e CONFIG_CC_IS_CLANG -e CONFIG_LD_LLD -e CONFIG_LTO_CLANG -e CONFIG_THINLTO \
             -d CONFIG_LTO_CLANG_FULL -e CONFIG_PREEMPT -e CONFIG_PREEMPT_DYNAMIC \
@@ -92,24 +91,3 @@ jobs:
         with:
           name: zeta-missionary
           path: zeta-missionary.zip
-          export ARCH=arm64
-          export LLVM=1
-          export LLVM_IAS=1
-          export CC="ccache clang"
-          export CXX="ccache clang++"
-          export LD=ld.lld
-          make -C kernel O=out -j$(nproc --ignore=2)
-
-      - name: Pack AnyKernel3
-        run: |
-          git clone --depth=1 https://github.com/osm0sis/AnyKernel3 anykernel
-          cp kernel/out/arch/arm64/boot/Image anykernel/ || true
-          cp kernel/out/arch/arm64/boot/dtbo.img anykernel/ || true
-          cd anykernel
-          zip -r ../zeta-missionary.zip *
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: zeta-missionary
-          path: zeta-missionary.zip          path: zeta-missionary.zip
