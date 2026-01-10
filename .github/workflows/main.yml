@@ -18,7 +18,22 @@ jobs:
           sudo apt update
           sudo apt install -y \
             git make bc bison flex libssl-dev libelf-dev \
-            clang-10 lld-10 llvm ccache python3 curl zip
+            llvm lld ccache python3 curl zip
+
+      - name: Setup AOSP Clang 19
+        run: |
+          mkdir -p /opt/clang
+          curl -fSL "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android12-release/clang-r450784.tar.gz" \
+            -o /tmp/clang19.tar.gz
+          tar -xzf /tmp/clang19.tar.gz -C /opt/clang --strip-components=1
+          chmod -R a+rX /opt/clang
+          echo "/opt/clang/bin" >> "$GITHUB_PATH"
+
+      - name: Set Clang environment
+        run: |
+          export CC=clang
+          export CXX=clang++
+          export LD=ld.lld
 
       - name: Clone Kernel
         run: |
@@ -33,7 +48,8 @@ jobs:
         run: |
           export ARCH=arm64
           export SUBARCH=arm64
-          export CC=clang-10
+          export CC=clang
+          export CXX=clang++
           export LD=ld.lld
           export LLVM=1
           export LLVM_IAS=1
