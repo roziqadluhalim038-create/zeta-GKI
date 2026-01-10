@@ -12,6 +12,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install system cross compiler and create AOSP-style toolchain path
+        run: |
+          sudo apt update
+          sudo apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu binutils-aarch64-linux-gnu
+          mkdir -p /home/runner/gcc-64/bin
+          ln -sf /usr/bin/aarch64-linux-gnu-gcc /home/runner/gcc-64/bin/aarch64-linux-android-gcc
+          ln -sf /usr/bin/aarch64-linux-gnu-g++ /home/runner/gcc-64/bin/aarch64-linux-android-g++
+          ln -sf /usr/bin/aarch64-linux-gnu-ar /home/runner/gcc-64/bin/aarch64-linux-android-ar
+          ln -sf /usr/bin/aarch64-linux-gnu-ranlib /home/runner/gcc-64/bin/aarch64-linux-android-ranlib
+          ln -sf /usr/bin/aarch64-linux-gnu-strip /home/runner/gcc-64/bin/aarch64-linux-android-strip
+          echo "/home/runner/gcc-64/bin" >> $GITHUB_PATH
+          ls -l /home/runner/gcc-64/bin
+
       - name: Install clang 21
         run: |
           sudo apt update
