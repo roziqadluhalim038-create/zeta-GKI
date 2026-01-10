@@ -34,8 +34,6 @@ jobs:
           rm -rf kernel/drivers/kernelsu || true
           mkdir -p kernel/drivers
           git clone --depth=1 https://github.com/KernelSU-Next/KernelSU kernel/drivers/kernelsu
-
-          # Hook into drivers/Kconfig & Makefile
           grep -q kernelsu kernel/drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> kernel/drivers/Kconfig
           grep -q 'obj-$(CONFIG_KSU) += kernelsu/' kernel/drivers/Makefile || echo 'obj-$(CONFIG_KSU) += kernelsu/' >> kernel/drivers/Makefile
 
@@ -49,60 +47,29 @@ jobs:
           export LLVM=1
           export LLVM_IAS=1
           make -C kernel O=out infinix_X6871_defconfig
-
+          
+          # Using a single long command string to avoid backslash syntax errors
           kernel/scripts/config --file kernel/out/.config \
-            -e CONFIG_CC_IS_CLANG \
-            -e CONFIG_LD_LLD \
-            -e CONFIG_LTO_CLANG \
-            -e CONFIG_THINLTO \
-            -d CONFIG_LTO_CLANG_FULL \
-            -e CONFIG_PREEMPT \
-            -e CONFIG_PREEMPT_DYNAMIC \
-            -e CONFIG_PREEMPT_COUNT \
-            -e CONFIG_HZ_250 \
-            -e CONFIG_NO_HZ_COMMON \
-            -e CONFIG_NO_HZ_IDLE \
-            -e CONFIG_HIGH_RES_TIMERS \
-            -e CONFIG_TICK_ONESHOT \
-            -e CONFIG_SCHED_AUTOGROUP \
-            -e CONFIG_SCHED_CORE \
-            -e CONFIG_SCHED_HRTICK \
-            -e CONFIG_UCLAMP_TASK \
-            -e CONFIG_CPU_FREQ_GOV_SCHEDUTIL \
-            -e CONFIG_CPU_IDLE \
-            -e CONFIG_CPU_IDLE_GOV_MENU \
-            -e CONFIG_CPU_IDLE_GOV_TEO \
-            -e CONFIG_RCU_EXPERT \
-            -e CONFIG_RCU_BOOST \
-            -e CONFIG_RCU_BOOST_DELAY \
-            -e CONFIG_RCU_NOCB_CPU \
-            -e CONFIG_CGROUPS \
-            -e CONFIG_CGROUP_SCHED \
-            -e CONFIG_CGROUP_CPUACCT \
-            -e CONFIG_CGROUP_FREEZER \
-            -e CONFIG_CGROUP_BPF \
-            -e CONFIG_NAMESPACES \
-            -e CONFIG_USER_NS \
-            -e CONFIG_PID_NS \
-            -e CONFIG_NET_NS \
-            -e CONFIG_IPC_NS \
-            -e CONFIG_ZRAM \
-            -e CONFIG_ZRAM_DEF_COMP_LZ4 \
-            -e CONFIG_CRYPTO_LZ4 \
-            -e CONFIG_ARM64_PAN \
-            -e CONFIG_ARM64_UAO \
-            -e CONFIG_ARM64_PTR_AUTH \
-            -e CONFIG_ARM64_BTI \
-            -e CONFIG_VDSO \
-            -e CONFIG_OPTIMIZE_INLINING \
-            -e CONFIG_DISABLE_UNUSED_SYMBOLS \
-            -e CONFIG_KSU \
-            -e CONFIG_KSU_SUSFS \
+            -e CONFIG_CC_IS_CLANG -e CONFIG_LD_LLD -e CONFIG_LTO_CLANG -e CONFIG_THINLTO \
+            -d CONFIG_LTO_CLANG_FULL -e CONFIG_PREEMPT -e CONFIG_PREEMPT_DYNAMIC \
+            -e CONFIG_PREEMPT_COUNT -e CONFIG_HZ_250 -e CONFIG_NO_HZ_COMMON \
+            -e CONFIG_NO_HZ_IDLE -e CONFIG_HIGH_RES_TIMERS -e CONFIG_TICK_ONESHOT \
+            -e CONFIG_SCHED_AUTOGROUP -e CONFIG_SCHED_CORE -e CONFIG_SCHED_HRTICK \
+            -e CONFIG_UCLAMP_TASK -e CONFIG_CPU_FREQ_GOV_SCHEDUTIL -e CONFIG_CPU_IDLE \
+            -e CONFIG_CPU_IDLE_GOV_MENU -e CONFIG_CPU_IDLE_GOV_TEO -e CONFIG_RCU_EXPERT \
+            -e CONFIG_RCU_BOOST -e CONFIG_RCU_BOOST_DELAY -e CONFIG_RCU_NOCB_CPU \
+            -e CONFIG_CGROUPS -e CONFIG_CGROUP_SCHED -e CONFIG_CGROUP_CPUACCT \
+            -e CONFIG_CGROUP_FREEZER -e CONFIG_CGROUP_BPF -e CONFIG_NAMESPACES \
+            -e CONFIG_USER_NS -e CONFIG_PID_NS -e CONFIG_NET_NS -e CONFIG_IPC_NS \
+            -e CONFIG_ZRAM -e CONFIG_ZRAM_DEF_COMP_LZ4 -e CONFIG_CRYPTO_LZ4 \
+            -e CONFIG_ARM64_PAN -e CONFIG_ARM64_UAO -e CONFIG_ARM64_PTR_AUTH \
+            -e CONFIG_ARM64_BTI -e CONFIG_VDSO -e CONFIG_OPTIMIZE_INLINING \
+            -e CONFIG_DISABLE_UNUSED_SYMBOLS -e CONFIG_KSU -e CONFIG_KSU_SUSFS \
             -e CONFIG_KSU_MANUAL_HOOK
 
           make -C kernel O=out olddefconfig
 
-      - name: Build kernel (RAM-safe)
+      - name: Build kernel
         run: |
           export ARCH=arm64
           export LLVM=1
@@ -125,21 +92,6 @@ jobs:
         with:
           name: zeta-missionary
           path: zeta-missionary.zip
-@_,*             -e CONFIG_ARM64_PAN \
-            -e CONFIG_ARM64_UAO \
-            -e CONFIG_ARM64_PTR_AUTH \
-            -e CONFIG_ARM64_BTI \
-            -e CONFIG_VDSO \
-            -e CONFIG_OPTIMIZE_INLINING \
-            -e CONFIG_DISABLE_UNUSED_SYMBOLS \
-            -e CONFIG_KSU \
-            -e CONFIG_KSU_SUSFS \
-            -e CONFIG_KSU_MANUAL_HOOK
-
-          make -C kernel O=out olddefconfig
-
-      - name: Build kernel (RAM-safe)
-        run: |
           export ARCH=arm64
           export LLVM=1
           export LLVM_IAS=1
