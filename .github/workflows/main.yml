@@ -6,6 +6,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -94,3 +96,19 @@ jobs:
         with:
           name: zeta-missionary
           path: zeta-missionary.zip
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: zeta-missionary.zip
+          tag_name: build-${{ github.run_number }}
+          name: Zeta Missionary Build ${{ github.run_number }}
+          body: |
+            Zeta Missionary Kernel Build
+            - Device: Infinix X6871
+            - Status: Automated Build
+            - Features: KernelSU, SUSFS Support
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
