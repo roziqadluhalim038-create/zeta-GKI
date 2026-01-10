@@ -10,7 +10,8 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Build Kernel
         uses: dabao1955/kernel_build_action@main
@@ -18,37 +19,31 @@ jobs:
           kernel-url: https://github.com/ramabondanp/android_kernel_common-5.10.git
           kernel-dir: common
           kernel-branch: android12-5.10
-
           config: gki_defconfig
           arch: arm64
-          android-version: 15
+          android-version: 12
 
           aosp-gcc: false
           aosp-clang: false
 
-          ksu: true
-          ksu-version: master
-          ksu-other: true
-          ksu-url: https://github.com/RapliVx/KernelSU
-
           extra-make-args: |
-  LLVM=1
-  LLVM_IAS=1
-  CONFIG_LOCALVERSION=-✦Missionary-Zeta
-  CONFIG_PREEMPT_DYNAMIC=y
-  CONFIG_HZ=250
-  CONFIG_NO_HZ_IDLE=y
-  CONFIG_TICK_ONESHOT=y
-  CONFIG_SCHED_AUTOGROUP=y
-  CONFIG_UCLAMP_TASK=y
-  CONFIG_RCU_BOOST=y
-  CONFIG_ZRAM=y
-  CONFIG_ZRAM_STREAMS=4
-  CONFIG_ZRAM_DEF_COMP_LZ4=y
-  CONFIG_TCP_CONG_BBR=y
-  CONFIG_DEFAULT_TCP_CONG=bbr
-  CONFIG_CPU_FREQ_GOV_SCHEDUTIL=y
-  CONFIG_CPU_IDLE_GOV_TEO=y
-  CONFIG_DEBUG_KERNEL=n
+            LLVM=1
+            LLVM_IAS=1
+            CONFIG_LOCALVERSION=-Missionary-Zeta
+            CONFIG_PREEMPT_DYNAMIC=y
+            CONFIG_HZ=250
+            CONFIG_NO_HZ_IDLE=y
+            CONFIG_TICK_ONESHOT=y
+            CONFIG_SCHED_AUTOGROUP=y
+            CONFIG_UCLAMP_TASK=y
+            CONFIG_RCU_BOOST=y
+            CONFIG_ZRAM=y
+            CONFIG_ZRAM_STREAMS=4
+            CONFIG_ZRAM_DEF_COMP_LZ4=y
+            CONFIG_TCP_CONG_BBR=y
+            CONFIG_DEFAULT_TCP_CONG=bbr
+            CONFIG_CPU_FREQ_GOV_SCHEDUTIL=y
+            CONFIG_CPU_IDLE_GOV_TEO=y
+            CONFIG_DEBUG_KERNEL=n
 
           anykernel3: true
