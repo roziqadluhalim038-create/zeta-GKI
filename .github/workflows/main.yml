@@ -32,7 +32,7 @@ jobs:
           config: gki_defconfig
           arch: arm64
           android-version: 12
-          aosp-gcc: false
+          aosp-gcc: true
           aosp-clang: false
           disable-lto: false
           extra-make-args: >
