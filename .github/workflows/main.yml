@@ -26,6 +26,7 @@ jobs:
 
       - name: Add KernelSU
         run: |
+          rm -rf kernel/drivers/kernelsu
           git clone --depth=1 https://github.com/RapliVx/KernelSU.git kernel/drivers/kernelsu
 
       - name: Build Missionary-Zeta + KernelSU
@@ -101,6 +102,7 @@ jobs:
 
       - name: Setup AnyKernel3
         run: |
+          rm -rf anykernel3
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git anykernel3
           cp kernel/out/arch/arm64/boot/Image anykernel3/
           cp kernel/out/arch/arm64/boot/dtbo.img anykernel3/ || true
