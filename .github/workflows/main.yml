@@ -18,22 +18,29 @@ jobs:
           sudo apt update
           sudo apt install -y \
             git make bc bison flex libssl-dev libelf-dev \
-            llvm lld ccache python3 curl zip
+            python3 curl zip ccache \
+            llvm lld
 
-      - name: Setup AOSP Clang 19
+      # ===== FIXED CLANG SETUP (NO 404) =====
+      - name: Setup AOSP Clang r450784
         run: |
+          set -e
           mkdir -p /opt/clang
-          curl -fSL "https://github.com/esk-project/aosp-clang-prebuilts/releases/download/r450784/clang-r450784-linux-x86.tar.gz" \
-            -o /tmp/clang19.tar.gz
-          tar -xzf /tmp/clang19.tar.gz -C /opt/clang --strip-components=1
-          chmod -R a+rX /opt/clang
-          echo "/opt/clang/bin" >> "$GITHUB_PATH"
+          git clone --depth=1 \
+            https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 \
+            /tmp/aosp-clang
 
-      - name: Set Clang environment
+          cp -r /tmp/aosp-clang/clang-r450784d/* /opt/clang/
+          chmod -R a+rX /opt/clang
+          echo "/opt/clang/bin" >> $GITHUB_PATH
+
+      - name: Set Clang Environment
         run: |
-          export CC=clang
-          export CXX=clang++
-          export LD=ld.lld
+          echo "CC=/opt/clang/bin/clang" >> $GITHUB_ENV
+          echo "CXX=/opt/clang/bin/clang++" >> $GITHUB_ENV
+          echo "LD=/opt/clang/bin/ld.lld" >> $GITHUB_ENV
+          echo "LLVM=1" >> $GITHUB_ENV
+          echo "LLVM_IAS=1" >> $GITHUB_ENV
 
       - name: Clone Kernel
         run: |
@@ -42,90 +49,105 @@ jobs:
       - name: Add KernelSU
         run: |
           rm -rf kernel/drivers/kernelsu
-          git clone --depth=1 https://github.com/RapliVx/KernelSU.git kernel/drivers/kernelsu
+          git clone --depth=1 \
+            https://github.com/RapliVx/KernelSU.git \
+            kernel/drivers/kernelsu
 
-      - name: Build Missionary-Zeta + KernelSU
+      - name: Build Missionary-Zeta Kernel (Full LTO + PREEMPT + Hemat)
         run: |
+          set -e
           export ARCH=arm64
           export SUBARCH=arm64
-          export CC=clang
-          export CXX=clang++
-          export LD=ld.lld
-          export LLVM=1
-          export LLVM_IAS=1
-          export KCFLAGS="-O3"
+          # Compiler flags: performance but conservative for kernel stability and power efficiency
+          export KCFLAGS="-O3 -pipe"
+          export KCPPFLAGS="-O3"
           export KBUILD_BUILD_USER=Zeta
           export KBUILD_BUILD_HOST=Missionary
 
           mkdir -p kernel/out
 
+          # base config
           make -C kernel O=out gki_defconfig
 
+          # === scripts/config: full LTO, PREEMPT, energy-saving options, disable tracing/debug ===
           scripts/config --file kernel/out/.config \
+            \
+            # === CLANG / LTO === \
             -e CONFIG_CC_IS_CLANG \
             -e CONFIG_LD_LLD \
             -e CONFIG_LTO_CLANG \
             -e CONFIG_LTO_CLANG_FULL \
             -d CONFIG_THINLTO \
             -d CONFIG_GCC_PLUGINS \
+            \
+            # === PREEMPT (RESPONSIVE) === \
             -e CONFIG_PREEMPT \
             -e CONFIG_PREEMPT_DYNAMIC \
             -e CONFIG_PREEMPT_COUNT \
-            -e CONFIG_HZ_300 \
-            -e CONFIG_HZ \
+            \
+            # === TIMER / TICK (HEMAT DAYA) === \
+            -e CONFIG_HIGH_RES_TIMERS \
+            -e CONFIG_TICK_ONESHOT \
             -e CONFIG_NO_HZ_COMMON \
             -e CONFIG_NO_HZ_IDLE \
+            -e CONFIG_HZ_300 \
+            \
+            # === SCHEDULER (BALANCE, BUKAN BOROS) === \
             -e CONFIG_SCHED_AUTOGROUP \
             -e CONFIG_SCHED_CORE \
             -e CONFIG_SCHED_HRTICK \
             -e CONFIG_UCLAMP_TASK \
+            \
+            # === CPUFREQ / IDLE === \
+            -e CONFIG_CPU_FREQ \
             -e CONFIG_CPU_FREQ_GOV_SCHEDUTIL \
             -e CONFIG_CPU_IDLE \
             -e CONFIG_CPU_IDLE_GOV_MENU \
             -e CONFIG_CPU_IDLE_GOV_TEO \
+            \
+            # === RCU (HEMAT BACKGROUND) === \
             -e CONFIG_RCU_EXPERT \
+            -e CONFIG_RCU_NOCB_CPU \
             -e CONFIG_RCU_BOOST \
             -e CONFIG_RCU_BOOST_DELAY \
-            -e CONFIG_RCU_NOCB_CPU \
-            -e CONFIG_HIGH_RES_TIMERS \
-            -e CONFIG_TICK_ONESHOT \
-            -e CONFIG_CGROUPS \
-            -e CONFIG_CGROUP_SCHED \
-            -e CONFIG_CGROUP_CPUACCT \
-            -e CONFIG_CGROUP_FREEZER \
-            -e CONFIG_CGROUP_BPF \
-            -e CONFIG_NAMESPACES \
-            -e CONFIG_USER_NS \
-            -e CONFIG_PID_NS \
-            -e CONFIG_NET_NS \
-            -e CONFIG_IPC_NS \
+            \
+            # === MEMORY / ZRAM === \
             -e CONFIG_ZRAM \
             -e CONFIG_ZRAM_DEF_COMP_LZ4 \
             -e CONFIG_CRYPTO_LZ4 \
+            \
+            # === ARM64 EFFICIENCY & SECURITY === \
             -e CONFIG_ARM64_PAN \
             -e CONFIG_ARM64_UAO \
             -e CONFIG_ARM64_PTR_AUTH \
             -e CONFIG_ARM64_BTI \
-            -e CONFIG_VDSO \
+            \
+            # === SIZE + POWER SAVING (turn off heavy debug/tracing) === \
             -e CONFIG_OPTIMIZE_INLINING \
             -e CONFIG_DISABLE_UNUSED_SYMBOLS \
+            -d CONFIG_DEBUG_KERNEL \
+            -d CONFIG_KPROBES \
+            -d CONFIG_FTRACE \
+            -d CONFIG_FUNCTION_TRACER \
+            \
+            # === KERNELSU === \
             -e CONFIG_KSU \
             -e CONFIG_KSU_SUSFS \
             -e CONFIG_KSU_MANUAL_HOOK
 
+          # finalize config and build
           make -C kernel O=out olddefconfig
           make -C kernel O=out -j$(nproc)
 
-      - name: Setup AnyKernel3
+      - name: Package AnyKernel3
         run: |
-          rm -rf anykernel3
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git anykernel3
           cp kernel/out/arch/arm64/boot/Image anykernel3/
           cp kernel/out/arch/arm64/boot/dtbo.img anykernel3/ || true
           cd anykernel3
           zip -r ../Missionary-Zeta-Kernel.zip *
 
-      - name: Upload AnyKernel3 ZIP
+      - name: Upload Kernel
         uses: actions/upload-artifact@v4
         with:
           name: Missionary-Zeta Kernel
