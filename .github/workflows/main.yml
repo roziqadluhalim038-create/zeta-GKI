@@ -55,44 +55,7 @@ jobs:
             -e CONFIG_LD_LLD \
             -e CONFIG_LTO_CLANG \
             -e CONFIG_THINLTO \
-            -e CONFIG_PREEMPT \
-            -e CONFIG_PREEMPT_DYNAMIC \
-            -e CONFIG_PREEMPT_COUNT \
-            -e CONFIG_HZ_250 \
-            -e CONFIG_NO_HZ_COMMON \
-            -e CONFIG_NO_HZ_IDLE \
-            -e CONFIG_HIGH_RES_TIMERS \
-            -e CONFIG_CPU_FREQ_GOV_SCHEDUTIL \
-            -e CONFIG_CPU_IDLE \
-            -e CONFIG_RCU_BOOST \
-            -e CONFIG_ZRAM \
-            -e CONFIG_KSU
-
-          make -C kernel O=out olddefconfig
-
-      - name: Build kernel
-        run: |
-          export ARCH=arm64
-          export LLVM=1
-          export LLVM_IAS=1
-          export CC="ccache clang"
-          export CXX="ccache clang++"
-          export LD=ld.lld
-          make -C kernel O=out -j$(nproc --ignore=2)
-
-      - name: Pack AnyKernel3
-        run: |
-          git clone --depth=1 https://github.com/osm0sis/AnyKernel3 ak3
-          cp kernel/out/arch/arm64/boot/Image ak3/
-          cp kernel/out/arch/arm64/boot/dtbo.img ak3/ || true
-          cd ak3
-          zip -r ../zeta-missionary.zip *
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: zeta-missionary
-          path: zeta-missionary.zip            -d CONFIG_LTO_CLANG_FULL \
+            -d CONFIG_LTO_CLANG_FULL \
             -e CONFIG_PREEMPT \
             -e CONFIG_PREEMPT_DYNAMIC \
             -e CONFIG_PREEMPT_COUNT \
@@ -127,6 +90,42 @@ jobs:
             -e CONFIG_ZRAM_DEF_COMP_LZ4 \
             -e CONFIG_CRYPTO_LZ4 \
             -e CONFIG_ARM64_PAN \
+            -e CONFIG_ARM64_UAO \
+            -e CONFIG_ARM64_PTR_AUTH \
+            -e CONFIG_ARM64_BTI \
+            -e CONFIG_VDSO \
+            -e CONFIG_OPTIMIZE_INLINING \
+            -e CONFIG_DISABLE_UNUSED_SYMBOLS \
+            -e CONFIG_KSU \
+            -e CONFIG_KSU_SUSFS \
+            -e CONFIG_KSU_MANUAL_HOOK
+
+          make -C kernel O=out olddefconfig
+
+      - name: Build kernel (RAM-safe)
+        run: |
+          export ARCH=arm64
+          export LLVM=1
+          export LLVM_IAS=1
+          export CC="ccache clang"
+          export CXX="ccache clang++"
+          export LD=ld.lld
+          make -C kernel O=out -j$(nproc --ignore=2)
+
+      - name: Pack AnyKernel3
+        run: |
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3 ak3
+          cp kernel/out/arch/arm64/boot/Image ak3/
+          cp kernel/out/arch/arm64/boot/dtbo.img ak3/ || true
+          cd ak3
+          zip -r ../zeta-missionary.zip *
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zeta-missionary
+          path: zeta-missionary.zip
+@_,*             -e CONFIG_ARM64_PAN \
             -e CONFIG_ARM64_UAO \
             -e CONFIG_ARM64_PTR_AUTH \
             -e CONFIG_ARM64_BTI \
