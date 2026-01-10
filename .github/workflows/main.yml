@@ -13,15 +13,25 @@ jobs:
       - name: Checkout Repo
         uses: actions/checkout@v4
 
+      # ===== FREE DISK (WAJIB) =====
+      - name: Free Disk Space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          df -h
+
       - name: Install Dependencies
         run: |
           sudo apt update
           sudo apt install -y \
             git make bc bison flex libssl-dev libelf-dev \
-            python3 curl zip ccache \
+            python3 zip ccache \
             llvm lld
 
-      # ===== FIXED CLANG SETUP (NO 404) =====
+      # ===== AOSP CLANG (DISK SAFE) =====
       - name: Setup AOSP Clang r450784
         run: |
           set -e
@@ -31,6 +41,7 @@ jobs:
             /tmp/aosp-clang
 
           cp -r /tmp/aosp-clang/clang-r450784d/* /opt/clang/
+          rm -rf /tmp/aosp-clang
           chmod -R a+rX /opt/clang
           echo "/opt/clang/bin" >> $GITHUB_PATH
 
@@ -53,26 +64,28 @@ jobs:
             https://github.com/RapliVx/KernelSU.git \
             kernel/drivers/kernelsu
 
-      - name: Build Missionary-Zeta Kernel (Full LTO + PREEMPT + Hemat)
+      # ===== BUILD: FULL LTO + PREEMPT + HEMAT =====
+      - name: Build ✦zeta-missionary Kernel
         run: |
           set -e
           export ARCH=arm64
           export SUBARCH=arm64
-          # Compiler flags: performance but conservative for kernel stability and power efficiency
           export KCFLAGS="-O3 -pipe"
           export KCPPFLAGS="-O3"
+          export KBUILD_VERBOSE=0
           export KBUILD_BUILD_USER=Zeta
           export KBUILD_BUILD_HOST=Missionary
 
           mkdir -p kernel/out
 
-          # base config
           make -C kernel O=out gki_defconfig
 
-          # === scripts/config: full LTO, PREEMPT, energy-saving options, disable tracing/debug ===
           scripts/config --file kernel/out/.config \
             \
-            # === CLANG / LTO === \
+            # === KERNEL NAME (DEVICE INFO) === \
+            -e CONFIG_LOCALVERSION="-✦zeta-missionary" \
+            \
+            # === CLANG + FULL LTO === \
             -e CONFIG_CC_IS_CLANG \
             -e CONFIG_LD_LLD \
             -e CONFIG_LTO_CLANG \
@@ -85,14 +98,14 @@ jobs:
             -e CONFIG_PREEMPT_DYNAMIC \
             -e CONFIG_PREEMPT_COUNT \
             \
-            # === TIMER / TICK (HEMAT DAYA) === \
+            # === TIMER / IDLE (HEMAT DAYA) === \
             -e CONFIG_HIGH_RES_TIMERS \
             -e CONFIG_TICK_ONESHOT \
             -e CONFIG_NO_HZ_COMMON \
             -e CONFIG_NO_HZ_IDLE \
             -e CONFIG_HZ_300 \
             \
-            # === SCHEDULER (BALANCE, BUKAN BOROS) === \
+            # === SCHEDULER (BALANCE) === \
             -e CONFIG_SCHED_AUTOGROUP \
             -e CONFIG_SCHED_CORE \
             -e CONFIG_SCHED_HRTICK \
@@ -105,24 +118,24 @@ jobs:
             -e CONFIG_CPU_IDLE_GOV_MENU \
             -e CONFIG_CPU_IDLE_GOV_TEO \
             \
-            # === RCU (HEMAT BACKGROUND) === \
+            # === RCU (BACKGROUND HEMAT) === \
             -e CONFIG_RCU_EXPERT \
             -e CONFIG_RCU_NOCB_CPU \
             -e CONFIG_RCU_BOOST \
             -e CONFIG_RCU_BOOST_DELAY \
             \
-            # === MEMORY / ZRAM === \
+            # === MEMORY === \
             -e CONFIG_ZRAM \
             -e CONFIG_ZRAM_DEF_COMP_LZ4 \
             -e CONFIG_CRYPTO_LZ4 \
             \
-            # === ARM64 EFFICIENCY & SECURITY === \
+            # === ARM64 === \
             -e CONFIG_ARM64_PAN \
             -e CONFIG_ARM64_UAO \
             -e CONFIG_ARM64_PTR_AUTH \
             -e CONFIG_ARM64_BTI \
             \
-            # === SIZE + POWER SAVING (turn off heavy debug/tracing) === \
+            # === SIZE + POWER === \
             -e CONFIG_OPTIMIZE_INLINING \
             -e CONFIG_DISABLE_UNUSED_SYMBOLS \
             -d CONFIG_DEBUG_KERNEL \
@@ -135,9 +148,18 @@ jobs:
             -e CONFIG_KSU_SUSFS \
             -e CONFIG_KSU_MANUAL_HOOK
 
-          # finalize config and build
           make -C kernel O=out olddefconfig
-          make -C kernel O=out -j$(nproc)
+          make -C kernel O=out -j$(nproc --ignore=2)
+
+      # ===== CLEANUP =====
+      - name: Cleanup build artifacts
+        run: |
+          rm -rf kernel/out/.tmp_versions
+          rm -rf kernel/out/tools
+          rm -rf kernel/out/scripts
+          rm -rf kernel/out/fs
+          rm -rf kernel/out/net
+          df -h
 
       - name: Package AnyKernel3
         run: |
@@ -145,10 +167,10 @@ jobs:
           cp kernel/out/arch/arm64/boot/Image anykernel3/
           cp kernel/out/arch/arm64/boot/dtbo.img anykernel3/ || true
           cd anykernel3
-          zip -r ../Missionary-Zeta-Kernel.zip *
+          zip -r ../✦zeta-missionary-Kernel.zip *
 
       - name: Upload Kernel
         uses: actions/upload-artifact@v4
         with:
-          name: Missionary-Zeta Kernel
-          path: Missionary-Zeta-Kernel.zip
+          name: ✦zeta-missionary Kernel
+          path: ✦zeta-missionary-Kernel.zip
