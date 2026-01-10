@@ -28,30 +28,46 @@ jobs:
           rm -rf kernel || true
           git clone --depth=1 https://github.com/fjrXTR/v1llx-gki-5.10 kernel
 
-      - name: Install KernelSU (RapliVx repo)
+      - name: Install KernelSU (RapliVx repo + run setup)
         run: |
           set -e
           rm -rf kernel/drivers/kernelsu || true
           rm -rf kernel/KernelSU || true
 
+          # Clone your repo (RapliVx)
           git clone --depth=1 https://github.com/RapliVx/KernelSU kernel/KernelSU
 
-          # run KernelSU setup script from kernel root
+          # Run the included setup script from the kernel root (it creates drivers/kernelsu -> ../KernelSU/kernel)
           (cd kernel && bash KernelSU/kernel/setup.sh master)
 
-      - name: Set kernel name & configure GKIDefconfig
+          # quick verification (prints contents so CI logs show what's actually linked/copied)
+          echo "--- kernel/drivers listing ---"
+          ls -la kernel/drivers || true
+          echo "--- readlink for kernelsu (if present) ---"
+          readlink -f kernel/drivers/kernelsu || true
+          echo "--- check that the Kconfig exists ---"
+          if [ -f kernel/drivers/kernelsu/Kconfig ]; then
+            echo "OK: kernel/drivers/kernelsu/Kconfig found"
+          else
+            echo "ERROR: kernel/drivers/kernelsu/Kconfig NOT found"
+            echo "Dump kernel/KernelSU/kernel listing:"
+            ls -la kernel/KernelSU/kernel || true
+            exit 2
+          fi
+
+      - name: Set kernel name & configure GKI defconfig
         run: |
           export ARCH=arm64
           export LLVM=1
           export LLVM_IAS=1
 
-          # generate GKIDefconfig
-          make -C kernel O=out gkidefconfig
+          # Use the correct GKI defconfig target (gki_defconfig)
+          make -C kernel O=out gki_defconfig
 
-          # set local version
+          # set local version string
           kernel/scripts/config --file kernel/out/.config --set-str CONFIG_LOCALVERSION "-zeta-✦missionary"
 
-          # enable/disable extra options you wanted
+          # enable/disable the options you wanted (unchanged)
           kernel/scripts/config --file kernel/out/.config \
             -e CONFIG_CC_IS_CLANG -e CONFIG_LD_LLD -e CONFIG_LTO_CLANG -e CONFIG_THINLTO \
             -d CONFIG_LTO_CLANG_FULL -e CONFIG_PREEMPT -e CONFIG_PREEMPT_DYNAMIC \
