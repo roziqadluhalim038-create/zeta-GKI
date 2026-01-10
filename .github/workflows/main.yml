@@ -22,7 +22,7 @@ jobs:
 
       - run: |
           sudo apt update
-          sudo apt install -y git make bc bison flex libssl-dev libelf-dev python3 zip ccache llvm lld
+          sudo apt install -y git make bc bison flex libssl-dev libelf-dev python3 zip ccache llvm lld zstd
 
       - run: |
           mkdir -p /opt/clang
@@ -39,6 +39,9 @@ jobs:
           echo "LD=/opt/clang/bin/ld.lld" >> $GITHUB_ENV
           echo "LLVM=1" >> $GITHUB_ENV
           echo "LLVM_IAS=1" >> $GITHUB_ENV
+          echo "LLVM_PARALLEL_LINK_JOBS=1" >> $GITHUB_ENV
+          echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
+          echo "CCACHE_MAXSIZE=2G" >> $GITHUB_ENV
 
       - run: |
           git clone --depth=1 https://github.com/fjrXTR/gki-5.10.git kernel
@@ -72,18 +75,19 @@ jobs:
             -e CONFIG_LTO_CLANG -e CONFIG_LTO_CLANG_FULL -d CONFIG_THINLTO \
             -e CONFIG_PREEMPT -e CONFIG_PREEMPT_DYNAMIC -e CONFIG_PREEMPT_COUNT \
             -e CONFIG_HIGH_RES_TIMERS -e CONFIG_TICK_ONESHOT -e CONFIG_NO_HZ_COMMON -e CONFIG_NO_HZ_IDLE -e CONFIG_HZ_250 \
-            -e CONFIG_SCHED_AUTOGROUP -e CONFIG_SCHED_CORE -e CONFIG_SCHED_HRTICK -e CONFIG_UCLAMP_TASK \
+            -e CONFIG_SCHED_AUTOGROUP -e CONFIG_SCHED_CORE -e CONFIG_UCLAMP_TASK \
             -e CONFIG_CPU_FREQ -e CONFIG_CPU_FREQ_GOV_SCHEDUTIL \
             -e CONFIG_CPU_IDLE -e CONFIG_CPU_IDLE_GOV_MENU -e CONFIG_CPU_IDLE_GOV_TEO \
-            -e CONFIG_RCU_EXPERT -e CONFIG_RCU_NOCB_CPU -e CONFIG_RCU_BOOST -e CONFIG_RCU_BOOST_DELAY \
+            -e CONFIG_RCU_EXPERT -e CONFIG_RCU_NOCB_CPU \
             -e CONFIG_ZRAM -e CONFIG_ZRAM_DEF_COMP_LZ4 -e CONFIG_CRYPTO_LZ4 \
             -e CONFIG_ARM64_PAN -e CONFIG_ARM64_UAO -e CONFIG_ARM64_PTR_AUTH -e CONFIG_ARM64_BTI \
+            -e CONFIG_KERNEL_ZSTD \
             -e CONFIG_OPTIMIZE_INLINING -e CONFIG_DISABLE_UNUSED_SYMBOLS \
             -d CONFIG_DEBUG_KERNEL -d CONFIG_KPROBES -d CONFIG_FTRACE -d CONFIG_FUNCTION_TRACER \
             -e CONFIG_KSU -e CONFIG_KSU_SUSFS -e CONFIG_KSU_MANUAL_HOOK
 
           make O=out olddefconfig
-          make O=out -j$(nproc --ignore=2)
+          make O=out -j2
 
       - run: |
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git anykernel3
