@@ -21,35 +21,85 @@ jobs:
           kernel-dir: common
           kernel-branch: android12-5.10
 
-          # Build config
+          # Base config
           config: gki_defconfig
           arch: arm64
           android-version: 12
 
-          # Toolchain (IMPORTANT)
-          aosp-gcc: false
+          # Toolchain (MANDATORY for this action)
+          aosp-gcc: true
           aosp-clang: true
           aosp-clang-version: r522817
 
-          # Performance + battery focused tweaks
+          # Performance + Battery tuned (GKI SAFE)
           extra-make-args: |
             LLVM=1
             LLVM_IAS=1
             CONFIG_LOCALVERSION=-Missionary-Zeta
+
+            # Scheduler
             CONFIG_PREEMPT_DYNAMIC=y
-            CONFIG_HZ=250
-            CONFIG_NO_HZ_IDLE=y
-            CONFIG_TICK_ONESHOT=y
             CONFIG_SCHED_AUTOGROUP=y
             CONFIG_UCLAMP_TASK=y
+            CONFIG_UCLAMP_BUCKETS_COUNT=5
+            CONFIG_SCHED_CORE=y
+            CONFIG_SCHED_MC=y
+            CONFIG_SCHED_HRTICK=y
+            CONFIG_FAIR_GROUP_SCHED=y
+
+            # CPUFreq / Idle
+            CONFIG_CPU_FREQ=y
             CONFIG_CPU_FREQ_GOV_SCHEDUTIL=y
+            CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL=y
+            CONFIG_CPU_IDLE=y
             CONFIG_CPU_IDLE_GOV_TEO=y
+            CONFIG_CPU_IDLE_MULTIPLE_DRIVERS=y
+            CONFIG_NO_HZ_IDLE=y
+            CONFIG_TICK_ONESHOT=y
+            CONFIG_HZ=250
+
+            # Power management
+            CONFIG_PM=y
+            CONFIG_PM_SLEEP=y
+            CONFIG_PM_AUTOSLEEP=y
+            CONFIG_PM_WAKELOCKS=y
+            CONFIG_PM_WAKELOCKS_LIMIT=0
+            CONFIG_PM_DEBUG=n
+            CONFIG_ENERGY_MODEL=y
+
+            # RCU / IRQ latency
+            CONFIG_RCU_BOOST=y
+            CONFIG_RCU_BOOST_DELAY=500
+            CONFIG_RCU_NOCB_CPU=y
+            CONFIG_IRQ_TIME_ACCOUNTING=y
+
+            # Memory / ZRAM
             CONFIG_ZRAM=y
             CONFIG_ZRAM_DEF_COMP_LZ4=y
             CONFIG_ZRAM_STREAMS=4
+            CONFIG_ZSMALLOC=y
+            CONFIG_PAGE_COUNTER=y
+            CONFIG_MEMCG=y
+            CONFIG_MEMCG_SWAP=y
+
+            # Network
             CONFIG_TCP_CONG_BBR=y
             CONFIG_DEFAULT_TCP_CONG=bbr
-            CONFIG_DEBUG_KERNEL=n
+            CONFIG_NET_SCH_FQ=y
+            CONFIG_NET_SCH_DEFAULT=y
+            CONFIG_DEFAULT_FQ=y
 
-          # Packaging
+            # Input / Gaming
+            CONFIG_INPUT_EVDEV=y
+            CONFIG_INPUT_POLLDEV=y
+            CONFIG_SCHED_STACK_END_CHECK=n
+
+            # De-bloat / no debug
+            CONFIG_DEBUG_KERNEL=n
+            CONFIG_KALLSYMS=n
+            CONFIG_BUG=n
+            CONFIG_HARDENED_USERCOPY=n
+            CONFIG_FORTIFY_SOURCE=n
+
+          # Package
           anykernel3: true
