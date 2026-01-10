@@ -24,7 +24,7 @@ jobs:
           sudo update-alternatives --install /usr/bin/ld.lld ld.lld /usr/bin/ld.lld-21 100
           clang --version
 
-      - name: Fake AOSP GCC
+      - name: Fake AOSP GCC64
         run: |
           mkdir -p /home/runner/gcc-64/bin
           echo '#!/bin/sh' > /home/runner/gcc-64/bin/aarch64-linux-android-gcc
@@ -33,6 +33,16 @@ jobs:
           echo '#!/bin/sh' > /home/runner/gcc-64/bin/aarch64-linux-android-g++
           echo 'exec clang++ "$@"' >> /home/runner/gcc-64/bin/aarch64-linux-android-g++
           chmod +x /home/runner/gcc-64/bin/aarch64-linux-android-g++
+
+      - name: Fake AOSP GCC32
+        run: |
+          mkdir -p /home/runner/gcc-32/bin
+          echo '#!/bin/sh' > /home/runner/gcc-32/bin/arm-linux-androideabi-gcc
+          echo 'exec clang "$@"' >> /home/runner/gcc-32/bin/arm-linux-androideabi-gcc
+          chmod +x /home/runner/gcc-32/bin/arm-linux-androideabi-gcc
+          echo '#!/bin/sh' > /home/runner/gcc-32/bin/arm-linux-androideabi-g++
+          echo 'exec clang++ "$@"' >> /home/runner/gcc-32/bin/arm-linux-androideabi-g++
+          chmod +x /home/runner/gcc-32/bin/arm-linux-androideabi-g++
 
       - uses: dabao1955/kernel_build_action@main
         with:
