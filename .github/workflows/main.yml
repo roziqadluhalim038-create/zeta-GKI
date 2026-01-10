@@ -10,9 +10,10 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Repo
+        uses: actions/checkout@v4
 
-      - name: Dependencies
+      - name: Install Dependencies
         run: |
           sudo apt update
           sudo apt install -y \
@@ -25,8 +26,7 @@ jobs:
 
       - name: Add KernelSU
         run: |
-          cd kernel
-          curl -LSs https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh | bash -
+          git clone --depth=1 https://github.com/RapliVx/KernelSU.git kernel/drivers/kernelsu
 
       - name: Build Missionary-Zeta + KernelSU
         run: |
@@ -106,7 +106,7 @@ jobs:
           cp kernel/out/arch/arm64/boot/dtbo.img anykernel3/ || true
           cd anykernel3
           zip -r ../Missionary-Zeta-Kernel.zip *
-      
+
       - name: Upload AnyKernel3 ZIP
         uses: actions/upload-artifact@v4
         with:
