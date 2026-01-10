@@ -12,14 +12,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install required system packages
+      - name: Install system deps
         run: |
           sudo apt update
-          sudo apt install -y wget gnupg lsb-release \
+          sudo apt install -y wget gnupg lsb-release jq \
             gcc-aarch64-linux-gnu g++-aarch64-linux-gnu binutils-aarch64-linux-gnu \
-            gcc-arm-linux-gnueabi g++-arm-linux-gnueabi binutils-arm-linux-gnueabi \
-            binutils
-          sudo apt install -y python3 jq
+            gcc-arm-linux-gnueabi g++-arm-linux-gnueabi binutils-arm-linux-gnueabi
 
       - name: Install clang 21
         run: |
@@ -31,62 +29,25 @@ jobs:
           sudo update-alternatives --install /usr/bin/ld.lld ld.lld /usr/bin/ld.lld-21 100
           clang --version
 
-      - name: Create GCC64 tool wrappers and symlinks
+      - name: Setup fake GCC64
         run: |
-          sudo rm -rf /home/runner/gcc-64 || true
+          rm -rf /home/runner/gcc-64
           mkdir -p /home/runner/gcc-64/bin
-          cat > /home/runner/gcc-64/bin/aarch64-linux-android-gcc <<'EOF'
-#!/bin/sh
-exec clang --target=aarch64-linux-android --sysroot=/usr/aarch64-linux-gnu "$@"
-EOF
-          cat > /home/runner/gcc-64/bin/aarch64-linux-android-g++ <<'EOF'
-#!/bin/sh
-exec clang++ --target=aarch64-linux-android --sysroot=/usr/aarch64-linux-gnu "$@"
-EOF
-          chmod +x /home/runner/gcc-64/bin/aarch64-linux-android-gcc
-          chmod +x /home/runner/gcc-64/bin/aarch64-linux-android-g++
-          ln -sf /usr/bin/aarch64-linux-gnu-ar /home/runner/gcc-64/bin/aarch64-linux-android-ar
-          ln -sf /usr/bin/aarch64-linux-gnu-ranlib /home/runner/gcc-64/bin/aarch64-linux-android-ranlib
-          ln -sf /usr/bin/aarch64-linux-gnu-strip /home/runner/gcc-64/bin/aarch64-linux-android-strip
-          ln -sf /usr/bin/aarch64-linux-gnu-objcopy /home/runner/gcc-64/bin/aarch64-linux-android-objcopy
-          ln -sf /usr/bin/aarch64-linux-gnu-objdump /home/runner/gcc-64/bin/aarch64-linux-android-objdump
-          ln -sf /usr/bin/aarch64-linux-gnu-nm /home/runner/gcc-64/bin/aarch64-linux-android-nm
+          printf '#!/bin/sh\nexec clang "$@"\n' > /home/runner/gcc-64/bin/aarch64-linux-android-gcc
+          printf '#!/bin/sh\nexec clang++ "$@"\n' > /home/runner/gcc-64/bin/aarch64-linux-android-g++
+          chmod +x /home/runner/gcc-64/bin/*
           echo "/home/runner/gcc-64/bin" >> $GITHUB_PATH
           echo "GCC64=/home/runner/gcc-64/bin/aarch64-linux-android-gcc" >> $GITHUB_ENV
-          ls -l /home/runner/gcc-64/bin
 
-      - name: Create GCC32 tool wrappers and symlinks
+      - name: Setup fake GCC32
         run: |
-          sudo rm -rf /home/runner/gcc-32 || true
+          rm -rf /home/runner/gcc-32
           mkdir -p /home/runner/gcc-32/bin
-          cat > /home/runner/gcc-32/bin/arm-linux-androideabi-gcc <<'EOF'
-#!/bin/sh
-exec clang --target=armv7-none-linux-androideabi --sysroot=/usr/arm-linux-gnueabi "$@"
-EOF
-          cat > /home/runner/gcc-32/bin/arm-linux-androideabi-g++ <<'EOF'
-#!/bin/sh
-exec clang++ --target=armv7-none-linux-androideabi --sysroot=/usr/arm-linux-gnueabi "$@"
-EOF
-          chmod +x /home/runner/gcc-32/bin/arm-linux-androideabi-gcc
-          chmod +x /home/runner/gcc-32/bin/arm-linux-androideabi-g++
-          ln -sf /usr/bin/arm-linux-gnueabi-ar /home/runner/gcc-32/bin/arm-linux-androideabi-ar
-          ln -sf /usr/bin/arm-linux-gnueabi-ranlib /home/runner/gcc-32/bin/arm-linux-androideabi-ranlib
-          ln -sf /usr/bin/arm-linux-gnueabi-strip /home/runner/gcc-32/bin/arm-linux-androideabi-strip
-          ln -sf /usr/bin/arm-linux-gnueabi-objcopy /home/runner/gcc-32/bin/arm-linux-androideabi-objcopy
-          ln -sf /usr/bin/arm-linux-gnueabi-objdump /home/runner/gcc-32/bin/arm-linux-androideabi-objdump
-          ln -sf /usr/bin/arm-linux-gnueabi-nm /home/runner/gcc-32/bin/arm-linux-androideabi-nm
+          printf '#!/bin/sh\nexec clang "$@"\n' > /home/runner/gcc-32/bin/arm-linux-androideabi-gcc
+          printf '#!/bin/sh\nexec clang++ "$@"\n' > /home/runner/gcc-32/bin/arm-linux-androideabi-g++
+          chmod +x /home/runner/gcc-32/bin/*
           echo "/home/runner/gcc-32/bin" >> $GITHUB_PATH
           echo "GCC32=/home/runner/gcc-32/bin/arm-linux-androideabi-gcc" >> $GITHUB_ENV
-          ls -l /home/runner/gcc-32/bin
-
-      - name: Verify toolchain
-        run: |
-          which clang || true
-          clang --version || true
-          which aarch64-linux-android-gcc || true
-          aarch64-linux-android-gcc --version || true
-          which arm-linux-androideabi-gcc || true
-          arm-linux-androideabi-gcc --version || true
 
       - uses: dabao1955/kernel_build_action@main
         with:
