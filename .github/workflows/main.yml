@@ -1,4 +1,4 @@
-name: zeta-missionary
+name: zeta-missionary-build
 
 on:
   workflow_dispatch:
@@ -6,117 +6,94 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install deps
+      - name: Free disk & prep
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost || true
+          sudo apt-get -y autoremove || true
+          sudo apt clean || true
+          df -h
+
+      - name: Install dependencies
         run: |
           sudo apt update
           sudo apt install -y git bc bison flex libssl-dev libelf-dev \
-          llvm lld clang ccache python3 zip make gcc
+            wget gnupg lsb-release xz-utils ccache python3 zip make build-essential
 
-      - name: Setup ccache
+      - name: Install LLVM/Clang (apt)
+        run: |
+          wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          sudo add-apt-repository "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-19 main"
+          sudo apt update
+          sudo apt install -y clang-19 lld-19 llvm-19
+          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-19 100
+          sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-19 100
+          sudo update-alternatives --install /usr/bin/ld.lld ld.lld /usr/bin/ld.lld-19 100
+          clang --version || true
+          ld.lld --version || true
+
+      - name: Setup ccache env
         run: |
           echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
-          echo "CCACHE_COMPRESS=1" >> $GITHUB_ENV
-          echo "CCACHE_MAXSIZE=10G" >> $GITHUB_ENV
+          echo "CCACHE_MAXSIZE=8G" >> $GITHUB_ENV
+          ccache -M 8G || true
 
-      - name: Clone Valhaze GKI
+      - name: Clone Valhaze kernel (stable default branch)
         run: |
           git clone --depth=1 https://github.com/fjrXTR/v1llx-gki-5.10 kernel
 
-      - name: Add KernelSU-Next
+      - name: Add KernelSU-Next (clone into drivers)
         run: |
+          rm -rf kernel/drivers/kernelsu || true
+          git clone --depth=1 https://github.com/KernelSU-Next/KernelSU.git kernel/drivers/kernelsu
+          # ensure drivers/Kconfig and drivers/Makefile reference kernelsu if needed
+          if ! grep -Fq 'drivers/kernelsu/Kconfig' kernel/drivers/Kconfig 2>/dev/null ; then
+            echo 'source "drivers/kernelsu/Kconfig"' >> kernel/drivers/Kconfig
+          fi
+          if ! grep -Fq 'obj-$(CONFIG_KSU) += kernelsu/' kernel/drivers/Makefile 2>/dev/null ; then
+            echo 'obj-$(CONFIG_KSU) += kernelsu/' >> kernel/drivers/Makefile
+          fi
+          ls -la kernel/drivers/kernelsu || true
+
+      - name: Prepare build dir
+        run: |
+          mkdir -p kernel/out
+          df -h
+
+      - name: Build gki_defconfig and compile (no config changes)
+        env:
+          ARCH: arm64
+          SUBARCH: arm64
+          CC: clang
+          CXX: clang++
+          LD: ld.lld
+          LLVM: "1"
+          LLVM_IAS: "1"
+        run: |
+          set -e
           cd kernel
-          curl -LSs https://raw.githubusercontent.com/KernelSU-Next/KernelSU/main/kernel/setup.sh | bash
+          make O=out gki_defconfig
+          # do not modify kernel config or localversion (user requested)
+          make O=out olddefconfig || true
+          # limit parallelism to avoid OOM on GitHub runners
+          make O=out -j2
 
-      - name: Set kernel name
+      - name: Collect artifacts (AnyKernel)
         run: |
-          sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-zeta-✦missionary"/' kernel/arch/arm64/configs/gki_defconfig
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3 anykernel
+          cp kernel/out/arch/arm64/boot/Image anykernel/ || true
+          cp kernel/out/arch/arm64/boot/dtbo.img anykernel/ || true
+          cd anykernel
+          zip -r ../zeta-missionary-kernel.zip *
+          ls -lh ../zeta-missionary-kernel.zip
 
-      - name: Configure kernel
-        run: |
-          export ARCH=arm64
-          export LLVM=1
-          export LLVM_IAS=1
-          export CC=clang
-          export CXX=clang++
-          export LD=ld.lld
-
-          make -C kernel O=out gki_defconfig
-
-          kernel/scripts/config --file kernel/out/.config \
-            -e CONFIG_CC_IS_CLANG \
-            -e CONFIG_LD_LLD \
-            -e CONFIG_LTO_CLANG \
-            -e CONFIG_THINLTO \
-            -d CONFIG_LTO_CLANG_FULL \
-            -e CONFIG_PREEMPT \
-            -e CONFIG_PREEMPT_DYNAMIC \
-            -e CONFIG_PREEMPT_COUNT \
-            -e CONFIG_HZ_250 \
-            -e CONFIG_NO_HZ_COMMON \
-            -e CONFIG_NO_HZ_IDLE \
-            -e CONFIG_HIGH_RES_TIMERS \
-            -e CONFIG_SCHED_AUTOGROUP \
-            -e CONFIG_SCHED_CORE \
-            -e CONFIG_SCHED_HRTICK \
-            -e CONFIG_UCLAMP_TASK \
-            -e CONFIG_CPU_FREQ_GOV_SCHEDUTIL \
-            -e CONFIG_CPU_IDLE \
-            -e CONFIG_CPU_IDLE_GOV_MENU \
-            -e CONFIG_CPU_IDLE_GOV_TEO \
-            -e CONFIG_RCU_EXPERT \
-            -e CONFIG_RCU_BOOST \
-            -e CONFIG_RCU_BOOST_DELAY \
-            -e CONFIG_RCU_NOCB_CPU \
-            -e CONFIG_CGROUPS \
-            -e CONFIG_CGROUP_SCHED \
-            -e CONFIG_CGROUP_CPUACCT \
-            -e CONFIG_CGROUP_FREEZER \
-            -e CONFIG_CGROUP_BPF \
-            -e CONFIG_NAMESPACES \
-            -e CONFIG_USER_NS \
-            -e CONFIG_PID_NS \
-            -e CONFIG_NET_NS \
-            -e CONFIG_IPC_NS \
-            -e CONFIG_ZRAM \
-            -e CONFIG_ZRAM_DEF_COMP_LZ4 \
-            -e CONFIG_CRYPTO_LZ4 \
-            -e CONFIG_ARM64_PAN \
-            -e CONFIG_ARM64_UAO \
-            -e CONFIG_ARM64_PTR_AUTH \
-            -e CONFIG_ARM64_BTI \
-            -e CONFIG_VDSO \
-            -e CONFIG_OPTIMIZE_INLINING \
-            -e CONFIG_DISABLE_UNUSED_SYMBOLS \
-            -e CONFIG_KSU \
-            -e CONFIG_KSU_SUSFS \
-            -e CONFIG_KSU_MANUAL_HOOK
-
-          make -C kernel O=out olddefconfig
-
-      - name: Build kernel
-        run: |
-          export ARCH=arm64
-          export LLVM=1
-          export LLVM_IAS=1
-          export CC="ccache clang"
-          export CXX="ccache clang++"
-          export LD=ld.lld
-
-          make -C kernel O=out -j$(nproc --ignore=2)
-
-      - name: Pack AnyKernel3
-        run: |
-          git clone --depth=1 https://github.com/osm0sis/AnyKernel3
-          cp kernel/out/arch/arm64/boot/Image AnyKernel3/
-          cd AnyKernel3
-          zip -r ../zeta-missionary.zip *
-
-      - name: Upload
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: zeta-missionary
-          path: zeta-missionary.zip
+          name: zeta-missionary-kernel
+          path: zeta-missionary-kernel.zip
