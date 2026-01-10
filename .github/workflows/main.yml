@@ -24,18 +24,18 @@ jobs:
 
       - name: Clone Valhaze GKI
         run: |
-          git clone --depth=1 -b main https://github.com/fjrXTR/v1llx-gki-5.10 kernel
+          git clone --depth=1 https://github.com/fjrXTR/v1llx-gki-5.10 kernel
 
       - name: Add KernelSU-Next
         run: |
           cd kernel
           curl -LSs https://raw.githubusercontent.com/KernelSU-Next/KernelSU/main/kernel/setup.sh | bash
 
-      - name: Kernel name
+      - name: Set kernel name
         run: |
-          sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-zeta-missionary"/' kernel/arch/arm64/configs/gki_defconfig
+          sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-zeta-✦missionary"/' kernel/arch/arm64/configs/gki_defconfig
 
-      - name: Generate config
+      - name: Configure kernel
         run: |
           export ARCH=arm64
           export LLVM=1
