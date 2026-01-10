@@ -6,8 +6,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    permissions:
-      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -30,17 +28,20 @@ jobs:
           rm -rf kernel || true
           git clone --depth=1 https://github.com/fjrXTR/v1llx-gki-5.10 kernel
 
-      - name: Install KernelSU
+      - name: Install KernelSU (RapliVx repo)
         run: |
           set -e
+          # Remove any previous (possibly wrong) install
           rm -rf kernel/drivers/kernelsu || true
-          git clone --depth=1 https://github.com/rsuntk/KernelSU kernel/drivers/kernelsu
-          if ! grep -q "drivers/kernelsu/Kconfig" kernel/drivers/Kconfig; then
-            echo 'source "drivers/kernelsu/Kconfig"' >> kernel/drivers/Kconfig
-          fi
-          if ! grep -q "kernelsu" kernel/drivers/Makefile; then
-            echo 'obj-$(CONFIG_KSU) += kernelsu/' >> kernel/drivers/Makefile
-          fi
+          rm -rf kernel/KernelSU || true
+
+          # Clone RapliVx's KernelSU into kernel/KernelSU (we use your repo)
+          git clone --depth=1 https://github.com/RapliVx/KernelSU kernel/KernelSU
+
+          # Run the included setup script from the kernel root.
+          # The script will create a symlink drivers/kernelsu -> ../KernelSU/kernel
+          # and modify drivers/Kconfig and drivers/Makefile as needed.
+          (cd kernel && bash KernelSU/kernel/setup.sh master)
 
       - name: Set kernel name
         run: |
@@ -52,7 +53,7 @@ jobs:
           export LLVM=1
           export LLVM_IAS=1
           make -C kernel O=out infinix_X6871_defconfig
-          
+
           kernel/scripts/config --file kernel/out/.config \
             -e CONFIG_CC_IS_CLANG -e CONFIG_LD_LLD -e CONFIG_LTO_CLANG -e CONFIG_THINLTO \
             -d CONFIG_LTO_CLANG_FULL -e CONFIG_PREEMPT -e CONFIG_PREEMPT_DYNAMIC \
@@ -96,19 +97,3 @@ jobs:
         with:
           name: zeta-missionary
           path: zeta-missionary.zip
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: zeta-missionary.zip
-          tag_name: build-${{ github.run_number }}
-          name: Zeta Missionary Build ${{ github.run_number }}
-          body: |
-            Zeta Missionary Kernel Build
-            - Device: Infinix X6871
-            - Status: Automated Build
-            - Features: KernelSU, SUSFS Support
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
