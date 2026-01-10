@@ -21,13 +21,13 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y git bc bison flex make curl zip python3 \
-            libssl-dev libelf-dev llvm lld ccache
+            libssl-dev libelf-dev llvm lld ccache xz-utils
 
-      - name: Setup AOSP Clang 19
+      - name: Setup Clang 19
         run: |
           mkdir -p /opt/clang
-          curl -L https://github.com/esk-project/aosp-clang-prebuilts/releases/download/r450784d/clang-r450784d-linux-x86.tar.gz -o clang.tar.gz
-          tar -xf clang.tar.gz -C /opt/clang --strip-components=1
+          curl -L https://github.com/ClangBuiltLinux/llvm-project/releases/download/llvmorg-19.1.7/clang+llvm-19.1.7-x86_64-linux-gnu.tar.xz -o clang.tar.xz
+          tar -xf clang.tar.xz -C /opt/clang --strip-components=1
           echo "/opt/clang/bin" >> $GITHUB_PATH
           clang --version
 
@@ -80,7 +80,6 @@ jobs:
             -e CONFIG_PREEMPT \
             -e CONFIG_PREEMPT_DYNAMIC \
             -e CONFIG_PREEMPT_COUNT \
-            -e CONFIG_HZ \
             -e CONFIG_HZ_250 \
             -d CONFIG_HZ_300 \
             -e CONFIG_NO_HZ_COMMON \
@@ -112,7 +111,6 @@ jobs:
 
           make -C kernel O=out olddefconfig
           make -C kernel O=out -j$(nproc --ignore=2)
-
           ccache -s
 
       - name: Pack AnyKernel
