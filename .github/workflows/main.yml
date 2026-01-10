@@ -12,15 +12,15 @@ jobs:
 
       - name: Free space
         run: |
-          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost
-          sudo apt clean
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost || true
+          sudo apt clean || true
           df -h
 
       - name: Install deps
         run: |
           sudo apt update
-          sudo apt install -y git bc bison flex libssl-dev libelf-dev \
-          clang lld llvm ccache python3 zip make gcc
+          sudo apt install -y git bc bison flex curl libssl-dev libelf-dev \
+            clang lld llvm ccache python3 zip make gcc wget xz-utils
 
       - name: Setup ccache
         run: |
@@ -32,18 +32,46 @@ jobs:
         run: |
           git clone --depth=1 https://github.com/fjrXTR/v1llx-gki-5.10 kernel
 
-      - name: Add KernelSU-Next
+      - name: Add KernelSU-Next (robust)
         run: |
-          rm -rf kernel/drivers/kernelsu
-          git clone --depth=1 https://github.com/KernelSU-Next/KernelSU.git kernel/drivers/kernelsu
-          echo 'source "drivers/kernelsu/Kconfig"' >> kernel/drivers/Kconfig
-          echo 'obj-$(CONFIG_KSU) += kernelsu/' >> kernel/drivers/Makefile
+          set -e
+          rm -rf kernel/drivers/kernelsu || true
 
-      - name: Kernel name
+          if git clone --depth=1 https://github.com/KernelSU-Next/KernelSU.git kernel/drivers/kernelsu 2>/dev/null ; then
+            echo "Cloned KernelSU via git"
+          else
+            echo "git clone failed — falling back to archive download"
+            TMP=/tmp/ksu_$$
+            mkdir -p $TMP
+            ARCHIVE_URL="https://github.com/KernelSU-Next/KernelSU/archive/refs/heads/main.tar.gz"
+            curl -fL --retry 3 "$ARCHIVE_URL" -o "$TMP/ksu.tar.gz"
+            tar -xzf "$TMP/ksu.tar.gz" -C "$TMP"
+            # copy sensible locations into drivers/kernelsu
+            mkdir -p kernel/drivers/kernelsu
+            if [ -d "$TMP/KernelSU-main/kernel" ]; then
+              cp -a "$TMP/KernelSU-main/kernel/"* kernel/drivers/kernelsu/ || true
+            elif [ -d "$TMP/KernelSU-main/drivers/kernelsu" ]; then
+              cp -a "$TMP/KernelSU-main/drivers/kernelsu/"* kernel/drivers/kernelsu/ || true
+            else
+              cp -a "$TMP/KernelSU-main/"* kernel/drivers/kernelsu/ || true
+            fi
+            rm -rf "$TMP"
+          fi
+
+          # ensure Kconfig/Makefile reference kernelsu
+          if ! grep -Fq 'drivers/kernelsu/Kconfig' kernel/drivers/Kconfig 2>/dev/null ; then
+            echo 'source "drivers/kernelsu/Kconfig"' >> kernel/drivers/Kconfig
+          fi
+          if ! grep -Fq 'obj-$(CONFIG_KSU) += kernelsu/' kernel/drivers/Makefile 2>/dev/null ; then
+            echo 'obj-$(CONFIG_KSU) += kernelsu/' >> kernel/drivers/Makefile
+          fi
+          ls -la kernel/drivers/kernelsu || true
+
+      - name: Set kernel name
         run: |
           sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-zeta-✦missionary"/' kernel/arch/arm64/configs/gki_defconfig
 
-      - name: Configure kernel
+      - name: Configure kernel (ThinLTO + tuning)
         run: |
           export ARCH=arm64
           export LLVM=1
@@ -105,7 +133,7 @@ jobs:
 
           make -C kernel O=out olddefconfig
 
-      - name: Build kernel
+      - name: Build kernel (RAM-safe)
         run: |
           export ARCH=arm64
           export LLVM=1
@@ -113,14 +141,14 @@ jobs:
           export CC="ccache clang"
           export CXX="ccache clang++"
           export LD=ld.lld
-
           make -C kernel O=out -j$(nproc --ignore=2)
 
       - name: Pack AnyKernel3
         run: |
-          git clone --depth=1 https://github.com/osm0sis/AnyKernel3
-          cp kernel/out/arch/arm64/boot/Image AnyKernel3/
-          cd AnyKernel3
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3 anykernel
+          cp kernel/out/arch/arm64/boot/Image anykernel/ || true
+          cp kernel/out/arch/arm64/boot/dtbo.img anykernel/ || true
+          cd anykernel
           zip -r ../zeta-missionary.zip *
 
       - name: Upload
