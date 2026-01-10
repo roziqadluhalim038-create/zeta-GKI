@@ -4,127 +4,111 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: ubuntu-24.04
+  Build-Kernel:
+    runs-on: ubuntu-22.04
     permissions:
       contents: write
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system deps
+      - name: Dependencies
         run: |
           sudo apt update
-          sudo apt install -y wget gnupg lsb-release jq \
-            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu binutils-aarch64-linux-gnu \
-            gcc-arm-linux-gnueabi g++-arm-linux-gnueabi binutils-arm-linux-gnueabi
+          sudo apt install -y \
+            git make bc bison flex libssl-dev libelf-dev \
+            clang lld llvm ccache python3 curl zip
 
-      - name: Install clang 21
+      - name: Clone Kernel
         run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh 21
-          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-21 100
-          sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-21 100
-          sudo update-alternatives --install /usr/bin/ld.lld ld.lld /usr/bin/ld.lld-21 100
-          clang --version
+          git clone --depth=1 https://github.com/fjrXTR/gki-5.10.git kernel
 
-      - name: Setup fake GCC64 and export prefix
+      - name: Add KernelSU
         run: |
-          rm -rf /home/runner/gcc-64
-          mkdir -p /home/runner/gcc-64/bin
-          printf '#!/bin/sh\nexec clang --target=aarch64-linux-android --sysroot=/usr/aarch64-linux-gnu "$@"\n' > /home/runner/gcc-64/bin/aarch64-linux-android-gcc
-          printf '#!/bin/sh\nexec clang++ --target=aarch64-linux-android --sysroot=/usr/aarch64-linux-gnu "$@"\n' > /home/runner/gcc-64/bin/aarch64-linux-android-g++
-          chmod +x /home/runner/gcc-64/bin/aarch64-linux-android-*
-          ln -sf /usr/bin/aarch64-linux-gnu-ar /home/runner/gcc-64/bin/aarch64-linux-android-ar
-          ln -sf /usr/bin/aarch64-linux-gnu-ranlib /home/runner/gcc-64/bin/aarch64-linux-android-ranlib
-          ln -sf /usr/bin/aarch64-linux-gnu-strip /home/runner/gcc-64/bin/aarch64-linux-android-strip
-          ln -sf /usr/bin/aarch64-linux-gnu-objcopy /home/runner/gcc-64/bin/aarch64-linux-android-objcopy
-          ln -sf /usr/bin/aarch64-linux-gnu-objdump /home/runner/gcc-64/bin/aarch64-linux-android-objdump
-          ln -sf /usr/bin/aarch64-linux-gnu-nm /home/runner/gcc-64/bin/aarch64-linux-android-nm
-          echo "/home/runner/gcc-64/bin" >> $GITHUB_PATH
-          echo "GCC64=aarch64-linux-android" >> $GITHUB_ENV
-          ls -l /home/runner/gcc-64/bin
+          cd kernel
+          curl -LSs https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh | bash -
 
-      - name: Setup fake GCC32 and export prefix
+      - name: Build Missionary-Zeta + KernelSU
         run: |
-          rm -rf /home/runner/gcc-32
-          mkdir -p /home/runner/gcc-32/bin
-          printf '#!/bin/sh\nexec clang --target=armv7-none-linux-androideabi --sysroot=/usr/arm-linux-gnueabi "$@"\n' > /home/runner/gcc-32/bin/arm-linux-androideabi-gcc
-          printf '#!/bin/sh\nexec clang++ --target=armv7-none-linux-androideabi --sysroot=/usr/arm-linux-gnueabi "$@"\n' > /home/runner/gcc-32/bin/arm-linux-androideabi-g++
-          chmod +x /home/runner/gcc-32/bin/arm-linux-androideabi-*
-          ln -sf /usr/bin/arm-linux-gnueabi-ar /home/runner/gcc-32/bin/arm-linux-androideabi-ar
-          ln -sf /usr/bin/arm-linux-gnueabi-ranlib /home/runner/gcc-32/bin/arm-linux-androideabi-ranlib
-          ln -sf /usr/bin/arm-linux-gnueabi-strip /home/runner/gcc-32/bin/arm-linux-androideabi-strip
-          ln -sf /usr/bin/arm-linux-gnueabi-objcopy /home/runner/gcc-32/bin/arm-linux-androideabi-objcopy
-          ln -sf /usr/bin/arm-linux-gnueabi-objdump /home/runner/gcc-32/bin/arm-linux-androideabi-objdump
-          ln -sf /usr/bin/arm-linux-gnueabi-nm /home/runner/gcc-32/bin/arm-linux-androideabi-nm
-          echo "/home/runner/gcc-32/bin" >> $GITHUB_PATH
-          echo "GCC32=arm-linux-androideabi" >> $GITHUB_ENV
-          ls -l /home/runner/gcc-32/bin
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export CC=clang
+          export LD=ld.lld
+          export LLVM=1
+          export LLVM_IAS=1
+          export KCFLAGS="-O3"
+          export KBUILD_BUILD_USER=Zeta
+          export KBUILD_BUILD_HOST=Missionary
 
-      - name: Verify toolchain
+          mkdir -p kernel/out
+
+          make -C kernel O=out gki_defconfig
+
+          scripts/config --file kernel/out/.config \
+            -e CONFIG_CC_IS_CLANG \
+            -e CONFIG_LD_LLD \
+            -e CONFIG_LTO_CLANG \
+            -e CONFIG_LTO_CLANG_FULL \
+            -d CONFIG_THINLTO \
+            -d CONFIG_GCC_PLUGINS \
+            -e CONFIG_PREEMPT \
+            -e CONFIG_PREEMPT_DYNAMIC \
+            -e CONFIG_PREEMPT_COUNT \
+            -e CONFIG_HZ_300 \
+            -e CONFIG_HZ \
+            -e CONFIG_NO_HZ_COMMON \
+            -e CONFIG_NO_HZ_IDLE \
+            -e CONFIG_SCHED_AUTOGROUP \
+            -e CONFIG_SCHED_CORE \
+            -e CONFIG_SCHED_HRTICK \
+            -e CONFIG_UCLAMP_TASK \
+            -e CONFIG_CPU_FREQ_GOV_SCHEDUTIL \
+            -e CONFIG_CPU_IDLE \
+            -e CONFIG_CPU_IDLE_GOV_MENU \
+            -e CONFIG_CPU_IDLE_GOV_TEO \
+            -e CONFIG_RCU_EXPERT \
+            -e CONFIG_RCU_BOOST \
+            -e CONFIG_RCU_BOOST_DELAY \
+            -e CONFIG_RCU_NOCB_CPU \
+            -e CONFIG_HIGH_RES_TIMERS \
+            -e CONFIG_TICK_ONESHOT \
+            -e CONFIG_CGROUPS \
+            -e CONFIG_CGROUP_SCHED \
+            -e CONFIG_CGROUP_CPUACCT \
+            -e CONFIG_CGROUP_FREEZER \
+            -e CONFIG_CGROUP_BPF \
+            -e CONFIG_NAMESPACES \
+            -e CONFIG_USER_NS \
+            -e CONFIG_PID_NS \
+            -e CONFIG_NET_NS \
+            -e CONFIG_IPC_NS \
+            -e CONFIG_ZRAM \
+            -e CONFIG_ZRAM_DEF_COMP_LZ4 \
+            -e CONFIG_CRYPTO_LZ4 \
+            -e CONFIG_ARM64_PAN \
+            -e CONFIG_ARM64_UAO \
+            -e CONFIG_ARM64_PTR_AUTH \
+            -e CONFIG_ARM64_BTI \
+            -e CONFIG_VDSO \
+            -e CONFIG_OPTIMIZE_INLINING \
+            -e CONFIG_DISABLE_UNUSED_SYMBOLS \
+            -e CONFIG_KSU \
+            -e CONFIG_KSU_SUSFS \
+            -e CONFIG_KSU_MANUAL_HOOK
+
+          make -C kernel O=out olddefconfig
+          make -C kernel O=out -j$(nproc)
+
+      - name: Setup AnyKernel3
         run: |
-          which clang || true
-          clang --version || true
-          which aarch64-linux-android-gcc || true
-          aarch64-linux-android-gcc --version || true
-          which arm-linux-androideabi-gcc || true
-          arm-linux-androideabi-gcc --version || true
-          echo "GCC64=$GCC64"
-          echo "GCC32=$GCC32"
-
-      - uses: dabao1955/kernel_build_action@main
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git anykernel3
+          cp kernel/out/arch/arm64/boot/Image anykernel3/
+          cp kernel/out/arch/arm64/boot/dtbo.img anykernel3/ || true
+          cd anykernel3
+          zip -r ../Missionary-Zeta-Kernel.zip *
+      
+      - name: Upload AnyKernel3 ZIP
+        uses: actions/upload-artifact@v4
         with:
-          kernel-url: https://github.com/fjrXTR/gki-5.10.git
-          kernel-dir: kernel
-          kernel-branch: villhaze-new
-          config: gki_defconfig
-          arch: arm64
-          android-version: 12
-          aosp-gcc: false
-          aosp-clang: false
-          disable-lto: false
-          extra-make-args: >
-            LLVM=1 LLVM_IAS=1 WERROR=0
-            CONFIG_LOCALVERSION=✦-Missionary-Zeta
-            CONFIG_LTO_CLANG=y
-            CONFIG_LTO_CLANG_FULL=y
-            CONFIG_PREEMPT=y
-            CONFIG_PREEMPT_DYNAMIC=n
-            CONFIG_PREEMPT_VOLUNTARY=n
-            CONFIG_PREEMPTION=y
-            CONFIG_PREEMPT_COUNT=y
-            CONFIG_KSU_SYSCALL_HOOK=y
-            CONFIG_KPROBES=y
-            CONFIG_KRETPROBES=y
-            CONFIG_HAVE_SYSCALL_TRACEPOINTS=y
-            CONFIG_HZ_250=y
-            CONFIG_HZ=250
-            CONFIG_TCP_CONG_BBRPLUS=y
-            CONFIG_DEFAULT_TCP_CONG=bbrplus
-            CONFIG_ZRAM_STREAMS=y
-            CONFIG_ZRAM_DEF_COMP_THREADS=4
-            CONFIG_WQ_POWER_EFFICIENT_DEFAULT=y
-            CONFIG_SCHED_AUTOGROUP=y
-            CONFIG_CPU_FREQ_GOV_SCHEDUTIL=y
-            CONFIG_CPU_IDLE_GOV_TEO=y
-            CONFIG_RCU_BOOST=y
-            CONFIG_SLUB_DEBUG=n
-            CONFIG_OPTIMIZE_INLINING=y
-            CONFIG_VDSO=y
-            CONFIG_DISABLE_UNUSED_SYMBOLS=y
-            CONFIG_PANIC_TIMEOUT=0
-            KCFLAGS=-Wno-error
-            CONFIG_ENERGY_MODEL=y
-            CONFIG_CPU_IDLE_GOV_MENU=n
-            CONFIG_ARM_PSCI_CPUIDLE=y
-            CONFIG_TICK_ONESHOT=y
-            CONFIG_NO_HZ_FULL=y
-            CONFIG_SCHED_MC=y
-            CONFIG_PM_AUTOSLEEP=y
-            CONFIG_PM_WAKELOCKS_LIMIT=0
-            CONFIG_SCHED_HRTICK=y
-            CONFIG_UCLAMP_TASK=y
-            CONFIG_CRYPTO_LZ4=y
-          anykernel3: true
+          name: Missionary-Zeta Kernel
+          path: Missionary-Zeta-Kernel.zip
