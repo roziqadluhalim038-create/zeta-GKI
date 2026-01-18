@@ -174,19 +174,8 @@ jobs:
           CONFIG_HZ_300=y
           CONFIG_FS_ENCRYPTION=y
           CONFIG_FS_VERITY=y
-          CONFIG_SECURITY_SELINUX=y
           CONFIG_PM_AUTOSLEEP=y
           CONFIG_PM_WAKELOCKS=y
-          CONFIG_PM_WAKELOCKS_LIMIT=100
-          CONFIG_PM_WAKELOCKS_GC=y
-          CONFIG_SUSPEND_SKIP_SYNC=y
-          CONFIG_GENERIC_IRQ_AFL_SET=y
-          CONFIG_IRQ_REMAP=y
-          CONFIG_HARDIRQS_SW_RESEND=y
-          # CONFIG_TASKSTATS is not set
-          # CONFIG_TASK_DELAY_ACCT is not set
-          # CONFIG_TASK_XACCT is not set
-          # CONFIG_CPU_FREQ_STAT is not set
           
           # Matikan ini di config juga untuk double protection
           # CONFIG_STACKPROTECTOR_PER_TASK is not set
